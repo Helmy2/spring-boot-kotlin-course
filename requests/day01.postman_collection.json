@@ -1,0 +1,141 @@
+{
+  "info": {
+    "_postman_id": "c1f7b8e2-04e3-4c91-9a72-74892c510101",
+    "name": "ShopCraft API - Day 01: Spring Boot with Kotlin",
+    "description": "Ready-to-import Postman collection covering Day 01 endpoints for the ShopCraft e-commerce platform.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "createdProductId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Product",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Location header is present\", function () {",
+              "    pm.response.to.have.header(\"Location\");",
+              "    const location = pm.response.headers.get(\"Location\");",
+              "    const parts = location.split('/');",
+              "    const id = parts[parts.length - 1];",
+              "    pm.collectionVariables.set(\"createdProductId\", id);",
+              "});",
+              "",
+              "pm.test(\"Response body contains product id and sku\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.have.property(\"id\");",
+              "    pm.expect(json).to.have.property(\"sku\");",
+              "    pm.expect(json.status).to.eql(\"ACTIVE\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-KEY-0001\",\n  \"name\": \"Mechanical Gaming Keyboard\",\n  \"description\": \"RGB backlight with tactile blue mechanical switches\",\n  \"price\": 129.99,\n  \"stockQuantity\": 50,\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      }
+    },
+    {
+      "name": "Get Product By ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Product ID matches requested ID\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.id.toString()).to.eql(pm.collectionVariables.get(\"createdProductId\"));",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products/{{createdProductId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products", "{{createdProductId}}"]
+        }
+      }
+    },
+    {
+      "name": "Get All Products",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response is an array of products\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(Array.isArray(json)).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      }
+    }
+  ]
+}

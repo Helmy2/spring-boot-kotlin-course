@@ -1,0 +1,36 @@
+### Day 01: Spring Boot with Kotlin - Interactive REST Client
+@baseUrl = http://localhost:8080
+
+### 1. Create a New Product (Returns 201 Created + Location Header)
+POST {{baseUrl}}/api/v1/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-KEY-0001",
+  "name": "Mechanical Gaming Keyboard",
+  "description": "RGB backlight with tactile blue mechanical switches",
+  "price": 129.99,
+  "stockQuantity": 50,
+  "status": "ACTIVE"
+}
+
+### 2. Create Another Product
+POST {{baseUrl}}/api/v1/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-MOU-0002",
+  "name": "Wireless Precision Mouse",
+  "description": "Ergonomic ultra-lightweight optical gaming mouse",
+  "price": 79.99,
+  "stockQuantity": 120,
+  "status": "ACTIVE"
+}
+
+### 3. Get Product By ID (Returns 200 OK)
+GET {{baseUrl}}/api/v1/products/1
+Accept: application/json
+
+### 4. Get All Products (Returns 200 OK)
+GET {{baseUrl}}/api/v1/products
+Accept: application/json
