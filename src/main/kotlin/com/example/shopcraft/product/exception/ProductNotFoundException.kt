@@ -1,3 +1,5 @@
 package com.example.shopcraft.product.exception
 
-class ProductNotFoundException(id: Long) : RuntimeException("Product with id '$id' was not found")
+import com.example.shopcraft.common.exception.ResourceNotFoundException
+
+class ProductNotFoundException(id: Long) : ResourceNotFoundException("Product with id '$id' was not found")

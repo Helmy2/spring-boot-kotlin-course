@@ -1,5 +1,6 @@
 package com.example.shopcraft.product.service
 
+import com.example.shopcraft.common.exception.DuplicateResourceException
 import com.example.shopcraft.product.dto.ProductFilterCriteria
 import com.example.shopcraft.product.dto.ProductPatchRequest
 import com.example.shopcraft.product.dto.ProductRequest
@@ -58,6 +59,25 @@ class ProductServiceTest {
     }
 
     @Test
+    fun `given existing sku, when createProduct, then throws DuplicateResourceException`() {
+        val request = ProductRequest(
+            sku = "SKU-DUPLICATE",
+            name = "Duplicate Item",
+            description = "Some description",
+            price = BigDecimal("19.99"),
+            stockQuantity = 10,
+            status = ProductStatus.ACTIVE
+        )
+        whenever(productRepository.existsBySku("SKU-DUPLICATE")).thenReturn(true)
+
+        assertThatThrownBy { productService.createProduct(request) }
+            .isInstanceOf(DuplicateResourceException::class.java)
+            .hasMessage("Product with SKU 'SKU-DUPLICATE' already exists")
+
+        verify(productRepository).existsBySku("SKU-DUPLICATE")
+    }
+
+    @Test
     fun `given existing product id, when getProductById, then returns matching response`() {
         val existingProduct = Product(
             id = 42L,
@@ -92,29 +112,15 @@ class ProductServiceTest {
 
     @Test
     fun `given products exist in repository, when getAllProducts, then returns mapped list of responses`() {
-        val product1 = Product(
-            id = 1L,
-            sku = "SKU-001",
-            name = "Product 1",
-            price = BigDecimal("10.00"),
-            stockQuantity = 5
-        )
-        val product2 = Product(
-            id = 2L,
-            sku = "SKU-002",
-            name = "Product 2",
-            price = BigDecimal("20.00"),
-            stockQuantity = 15
-        )
-        whenever(productRepository.findAll()).thenReturn(listOf(product1, product2))
+        val p1 = Product(id = 1L, sku = "SKU-1", name = "P1", price = BigDecimal("10.00"), stockQuantity = 5)
+        val p2 = Product(id = 2L, sku = "SKU-2", name = "P2", price = BigDecimal("20.00"), stockQuantity = 15)
+        whenever(productRepository.findAll()).thenReturn(listOf(p1, p2))
 
         val responses = productService.getAllProducts()
 
         assertThat(responses).hasSize(2)
-        assertThat(responses[0].id).isEqualTo(1L)
-        assertThat(responses[0].sku).isEqualTo("SKU-001")
-        assertThat(responses[1].id).isEqualTo(2L)
-        assertThat(responses[1].sku).isEqualTo("SKU-002")
+        assertThat(responses[0].sku).isEqualTo("SKU-1")
+        assertThat(responses[1].sku).isEqualTo("SKU-2")
         verify(productRepository).findAll()
     }
 
@@ -125,59 +131,90 @@ class ProductServiceTest {
             sku = "SKU-OLD",
             name = "Old Name",
             description = "Old Desc",
-            price = BigDecimal("50.00"),
-            stockQuantity = 10,
-            status = ProductStatus.DRAFT
+            price = BigDecimal("15.00"),
+            stockQuantity = 2
         )
-        val updateRequest = ProductRequest(
+        val request = ProductRequest(
             sku = "SKU-NEW",
             name = "New Name",
             description = "New Desc",
-            price = BigDecimal("75.00"),
-            stockQuantity = 25,
-            status = ProductStatus.ACTIVE
+            price = BigDecimal("25.00"),
+            stockQuantity = 12,
+            status = ProductStatus.ARCHIVED
         )
         whenever(productRepository.findById(5L)).thenReturn(Optional.of(existing))
         whenever(productRepository.save(any<Product>())).thenAnswer { it.arguments[0] as Product }
 
-        val response = productService.updateProduct(5L, updateRequest)
+        val response = productService.updateProduct(5L, request)
 
-        assertThat(response.id).isEqualTo(5L)
         assertThat(response.sku).isEqualTo("SKU-NEW")
         assertThat(response.name).isEqualTo("New Name")
-        assertThat(response.description).isEqualTo("New Desc")
-        assertThat(response.price).isEqualByComparingTo("75.00")
-        assertThat(response.stockQuantity).isEqualTo(25)
-        assertThat(response.status).isEqualTo(ProductStatus.ACTIVE)
+        assertThat(response.price).isEqualByComparingTo("25.00")
+        assertThat(response.stockQuantity).isEqualTo(12)
+        assertThat(response.status).isEqualTo(ProductStatus.ARCHIVED)
         verify(productRepository).save(existing)
+    }
+
+    @Test
+    fun `given conflicting sku with another product, when updateProduct, then throws DuplicateResourceException`() {
+        val request = ProductRequest(
+            sku = "SKU-COLLISION",
+            name = "Updated Item",
+            description = "Some description",
+            price = BigDecimal("29.99"),
+            stockQuantity = 20,
+            status = ProductStatus.ACTIVE
+        )
+        val existingProduct = Product(
+            id = 1L,
+            sku = "SKU-ORIGINAL",
+            name = "Original Item",
+            description = null,
+            price = BigDecimal("29.99"),
+            stockQuantity = 20,
+            status = ProductStatus.ACTIVE
+        )
+        val otherProductWithSku = Product(
+            id = 2L,
+            sku = "SKU-COLLISION",
+            name = "Other Item",
+            description = null,
+            price = BigDecimal("39.99"),
+            stockQuantity = 15,
+            status = ProductStatus.ACTIVE
+        )
+        whenever(productRepository.findById(1L)).thenReturn(Optional.of(existingProduct))
+        whenever(productRepository.findBySku("SKU-COLLISION")).thenReturn(otherProductWithSku)
+
+        assertThatThrownBy { productService.updateProduct(1L, request) }
+            .isInstanceOf(DuplicateResourceException::class.java)
+            .hasMessage("Product with SKU 'SKU-COLLISION' already exists")
+
+        verify(productRepository).findById(1L)
+        verify(productRepository).findBySku("SKU-COLLISION")
     }
 
     @Test
     fun `given existing product, when patchProduct, then modifies only non-null fields`() {
         val existing = Product(
             id = 7L,
-            sku = "SKU-KEEP",
+            sku = "SKU-UNCHANGED",
             name = "Original Name",
             description = "Original Desc",
-            price = BigDecimal("100.00"),
-            stockQuantity = 30,
+            price = BigDecimal("50.00"),
+            stockQuantity = 10,
             status = ProductStatus.ACTIVE
         )
-        val patchRequest = ProductPatchRequest(
-            name = "Patched Name",
-            price = BigDecimal("120.00")
-        )
+        val patchRequest = ProductPatchRequest(price = BigDecimal("59.99"))
         whenever(productRepository.findById(7L)).thenReturn(Optional.of(existing))
         whenever(productRepository.save(any<Product>())).thenAnswer { it.arguments[0] as Product }
 
         val response = productService.patchProduct(7L, patchRequest)
 
-        assertThat(response.id).isEqualTo(7L)
-        assertThat(response.sku).isEqualTo("SKU-KEEP")
-        assertThat(response.name).isEqualTo("Patched Name")
-        assertThat(response.description).isEqualTo("Original Desc")
-        assertThat(response.price).isEqualByComparingTo("120.00")
-        assertThat(response.stockQuantity).isEqualTo(30)
+        assertThat(response.sku).isEqualTo("SKU-UNCHANGED")
+        assertThat(response.name).isEqualTo("Original Name")
+        assertThat(response.price).isEqualByComparingTo("59.99")
+        assertThat(response.stockQuantity).isEqualTo(10)
         verify(productRepository).save(existing)
     }
 

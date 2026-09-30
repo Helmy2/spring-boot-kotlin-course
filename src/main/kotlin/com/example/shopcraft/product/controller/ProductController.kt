@@ -6,6 +6,7 @@ import com.example.shopcraft.product.dto.ProductPatchRequest
 import com.example.shopcraft.product.dto.ProductRequest
 import com.example.shopcraft.product.dto.ProductResponse
 import com.example.shopcraft.product.service.ProductService
+import jakarta.validation.Valid
 import org.springframework.data.domain.Pageable
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -26,7 +27,7 @@ class ProductController(
 ) {
 
     @PostMapping
-    fun createProduct(@RequestBody request: ProductRequest): ResponseEntity<ProductResponse> {
+    fun createProduct(@Valid @RequestBody request: ProductRequest): ResponseEntity<ProductResponse> {
         val created = productService.createProduct(request)
         val location = URI.create("/api/v1/products/${created.id}")
         return ResponseEntity.created(location).body(created)
@@ -50,7 +51,7 @@ class ProductController(
     @PutMapping("/{id}")
     fun updateProduct(
         @PathVariable id: Long,
-        @RequestBody request: ProductRequest
+        @Valid @RequestBody request: ProductRequest
     ): ResponseEntity<ProductResponse> {
         val updated = productService.updateProduct(id, request)
         return ResponseEntity.ok(updated)
@@ -59,7 +60,7 @@ class ProductController(
     @PatchMapping("/{id}")
     fun patchProduct(
         @PathVariable id: Long,
-        @RequestBody request: ProductPatchRequest
+        @Valid @RequestBody request: ProductPatchRequest
     ): ResponseEntity<ProductResponse> {
         val updated = productService.patchProduct(id, request)
         return ResponseEntity.ok(updated)

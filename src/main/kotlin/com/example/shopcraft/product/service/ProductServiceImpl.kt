@@ -1,5 +1,6 @@
 package com.example.shopcraft.product.service
 
+import com.example.shopcraft.common.exception.DuplicateResourceException
 import com.example.shopcraft.common.model.PagedResponse
 import com.example.shopcraft.common.model.toPagedResponse
 import com.example.shopcraft.product.dto.ProductFilterCriteria
@@ -23,6 +24,9 @@ class ProductServiceImpl(
 
     @Transactional
     override fun createProduct(request: ProductRequest): ProductResponse {
+        if (productRepository.existsBySku(request.sku)) {
+            throw DuplicateResourceException("Product with SKU '${request.sku}' already exists")
+        }
         val product = request.toEntity()
         val saved = productRepository.save(product)
         return saved.toResponse()
@@ -48,6 +52,11 @@ class ProductServiceImpl(
     override fun updateProduct(id: Long, request: ProductRequest): ProductResponse {
         val product = productRepository.findByIdOrNull(id)
             ?: throw ProductNotFoundException(id)
+
+        val existingWithSku = productRepository.findBySku(request.sku)
+        if (existingWithSku != null && existingWithSku.id != id) {
+            throw DuplicateResourceException("Product with SKU '${request.sku}' already exists")
+        }
 
         product.sku = request.sku
         product.name = request.name
