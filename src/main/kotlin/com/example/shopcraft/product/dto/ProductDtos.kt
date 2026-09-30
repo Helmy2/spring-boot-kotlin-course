@@ -34,3 +34,19 @@ data class ProductResponse(
     val createdAt: Instant,
     val updatedAt: Instant
 )
+
+data class ProductPatchRequest(
+    val name: String? = null,
+    val description: String? = null,
+    val price: BigDecimal? = null,
+    val stockQuantity: Int? = null,
+    val status: ProductStatus? = null
+)
+
+data class ProductFilterCriteria(
+    val search: String? = null,
+    val minPrice: BigDecimal? = null,
+    val maxPrice: BigDecimal? = null,
+    val status: ProductStatus? = null,
+    val inStock: Boolean? = null
+)

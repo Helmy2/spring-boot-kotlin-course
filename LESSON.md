@@ -1,172 +1,174 @@
-# Day 01: Spring Boot with Kotlin Foundations
+# Day 02: REST Principles & Dynamic Queries
 
-Welcome to **Day 01** of the Spring Boot with Kotlin Master Course! Today, you lay the foundational architecture for **ShopCraft**, our high-performance e-commerce backend engine.
+Welcome to **Day 02** of the Spring Boot with Kotlin Master Course! Today, we evolve **ShopCraft** from a basic CRUD service into an enterprise-grade, RESTful API featuring complete HTTP verb semantics, idempotent operations, Spring Data pagination, and type-safe dynamic query specifications.
 
 ---
 
 ## 🎯 Learning Objectives
 
 By the end of this module, you will be able to:
-1. **Configure Spring Boot with Kotlin**: Understand the Gradle Kotlin DSL (`build.gradle.kts`), compiler plugins (`kotlin-spring`, `kotlin-jpa`), and JDK 21 LTS toolchain.
-2. **Apply Idiomatic Dependency Injection**: Structure controllers, services, and repositories using constructor injection with immutable `val` properties, eliminating `@Autowired` and `lateinit var`.
-3. **Master JPA Entity vs. DTO Design**: Articulate why JPA entities must **never** be Kotlin `data class`es and how to design clean, immutable DTOs with mapping functions.
-4. **Leverage Spring Data Kotlin Extensions**: Use idiomatic extensions like `findByIdOrNull()` to eliminate Java `Optional<T>` boilerplate.
-5. **Implement REST Creation Semantics**: Expose REST endpoints returning `201 Created` with a standard RFC `Location` header (`/api/v1/products/{id}`).
-6. **Practice Test-Driven Development (TDD)**: Verify your work using BDD Given-When-Then test suites across unit, slice, and repository layers.
+1. **Master REST Architectural Constraints**: Articulate and enforce client-server separation, statelessness, uniform interfaces, and proper URI hierarchy.
+2. **Implement Full HTTP Semantics**:
+   - `PUT`: Complete idempotent resource replacement returning `200 OK`.
+   - `PATCH`: Selective partial attribute modification returning `200 OK`.
+   - `DELETE`: Idempotent resource removal returning `204 No Content` with an empty response body.
+3. **Differentiate Safe vs. Idempotent Methods**: Understand why `PUT` and `DELETE` must be idempotent, while `POST` is not.
+4. **Standardize API Responses**: Wrap paginated results into a clean, decoupled generic envelope (`PagedResponse<T>`).
+5. **Build Dynamic Queries with JPA Specifications**: Use Spring Data's `JpaSpecificationExecutor` and Kotlin `Specification<Product>` predicates to construct dynamic database queries on demand.
+6. **Apply Given-When-Then BDD Testing**: Verify REST endpoints and database specifications using comprehensive slice and unit tests.
 
 ---
 
 ## 🧠 Core Theory & Deep Dive
 
-### 1. Kotlin & Spring Boot: The Runtime Interplay
+### 1. The Core Constraints of REST
 
-Kotlin is a concise, statically typed language targeting the JVM. However, Spring Framework and JPA (Hibernate) were originally architected around Java conventions:
-- Spring heavily relies on **CGLIB proxies**, requiring classes and methods to be non-final (open).
-- Hibernate requires entity classes to have a **no-argument constructor** for reflection and proxy generation.
-
-In Kotlin, classes and methods are **final by default**, and primary constructors with properties do not generate zero-arg constructors by default.
-
-To bridge this gap without cluttering your code with `open` keywords or fake constructors, Spring Boot uses two Kotlin compiler plugins:
-
-```kotlin
-// build.gradle.kts
-plugins {
-    kotlin("jvm") version "2.3.21"
-    kotlin("plugin.spring") version "2.3.21" // Applies "all-open" to @Component, @Configuration, @Transactional, etc.
-    kotlin("plugin.jpa") version "2.3.21"    // Applies "no-arg" to @Entity, @MappedSuperclass, @Embeddable
-}
-```
-
-- **`kotlin-spring` (all-open)**: Automatically marks any class annotated with `@Component`, `@Async`, `@Transactional`, `@Cacheable`, `@SpringBootTest`, or `@Configuration` as `open` at the bytecode level.
-- **`kotlin-jpa` (no-arg)**: Synthesizes a bytecode-level zero-argument constructor for `@Entity` classes so Hibernate can instantiate them via reflection without requiring manual boilerplate.
+Representational State Transfer (REST) is an architectural style defined by Roy Fielding. It relies on 6 core constraints:
+1. **Client-Server**: Separation of concerns between the user interface (client) and data storage/business logic (server).
+2. **Statelessness**: Every client request must contain all necessary context for the server to process it. The server stores no client session context between requests.
+3. **Cacheability**: Responses must explicitly label themselves as cacheable or non-cacheable to improve network efficiency.
+4. **Uniform Interface**: Resources are identified by standard URIs, manipulated through standardized representations (JSON), and self-descriptive messages.
+5. **Layered System**: The client cannot tell whether it is connected directly to the end server or an intermediary (CDN, reverse proxy, API gateway).
+6. **Code on Demand (Optional)**: Servers can temporarily extend client functionality by transferring executable code (e.g. JavaScript).
 
 ---
 
-### 2. Constructor Injection vs. Field Injection
+### 2. HTTP Method Semantics: Safe vs. Idempotent
 
-In Java, developers historically used field injection (`@Autowired private ProductRepository repository;`). In Kotlin, field injection requires `lateinit var`:
+| HTTP Method | Safe? | Idempotent? | RFC Semantics & Status Code |
+| :--- | :--- | :--- | :--- |
+| **`GET`** | **Yes** | **Yes** | Retrieves representation without modifying state. Returns `200 OK` or `404 Not Found`. |
+| **`POST`** | No | No | Creates a subordinate resource. Returns `201 Created` with standard RFC `Location` header. |
+| **`PUT`** | No | **Yes** | **Complete replacement** of the target resource. Calling `PUT` multiple times with the same payload results in the exact same server state. Returns `200 OK`. |
+| **`PATCH`** | No | Conditional | **Partial modification** of specific attributes. Applies a set of changes to the resource. Returns `200 OK`. |
+| **`DELETE`** | No | **Yes** | Removes the resource. Calling `DELETE` once deletes the resource; calling it again leaves the resource deleted (the end state is identical). Returns `204 No Content`. |
 
-```kotlin
-// ❌ ANTI-PATTERN: Mutable state, tightly coupled, impossible to test cleanly without Spring context
-@Service
-class ProductService {
-    @Autowired
-    private lateinit var productRepository: ProductRepository
-}
-```
-
-#### Why `lateinit var` is an Anti-Pattern for Dependencies:
-1. **Mutates State**: `var` can be reassigned at runtime, breaking immutability.
-2. **Hidden Dependencies**: Object instantiation hides requirements, making pure unit testing difficult.
-3. **Null-Safety Violation**: If accessed before injection, it throws a runtime `UninitializedPropertyAccessException`.
-
-#### The Idiomatic Kotlin Solution:
-Use **primary constructor injection** with immutable `val` properties:
-
-```kotlin
-// ✅ IDIOMATIC KOTLIN: Immutable, clear contract, effortlessly testable with mockito-kotlin
-@Service
-@Transactional(readOnly = true)
-class ProductServiceImpl(
-    private val productRepository: ProductRepository
-) : ProductService { ... }
-```
-
-Spring automatically injects parameters of single constructors without requiring `@Autowired`.
+> **Key Takeaway on `204 No Content`**:
+> An HTTP `204 No Content` response **MUST NOT** include a message-body. In Spring MVC, we return `ResponseEntity.noContent().build()` with type parameter `Void`.
 
 ---
 
-### 3. The JPA Entity vs. DTO Data Class Dilemma
+### 3. PUT vs. PATCH: The Architectural Distinction
 
-One of the most common pitfalls when developers transition from Java to Kotlin is declaring JPA entities as `data class`:
+A major anti-pattern in modern backend development is treating `PUT` as a partial update.
 
+- **`PUT /api/v1/products/{id}` (Complete Replacement)**:
+  The request body represents the **entire desired state** of the resource. Any mutable property omitted in the request is considered cleared or set to null/default.
+  ```kotlin
+  // In ProductServiceImpl.kt
+  override fun updateProduct(id: Long, request: ProductRequest): ProductResponse {
+      val product = productRepository.findByIdOrNull(id) ?: throw ProductNotFoundException(id)
+      product.sku = request.sku
+      product.name = request.name
+      product.description = request.description
+      product.price = request.price
+      product.stockQuantity = request.stockQuantity
+      product.status = request.status
+      product.updatedAt = Instant.now()
+      return productRepository.save(product).toResponse()
+  }
+  ```
+
+- **`PATCH /api/v1/products/{id}` (Selective Partial Modification)**:
+  The request body contains **only the fields to be changed**. All fields are nullable, and only non-null values update the underlying entity:
+  ```kotlin
+  // In ProductServiceImpl.kt
+  override fun patchProduct(id: Long, request: ProductPatchRequest): ProductResponse {
+      val product = productRepository.findByIdOrNull(id) ?: throw ProductNotFoundException(id)
+      request.name?.let { product.name = it }
+      request.description?.let { product.description = it }
+      request.price?.let { product.price = it }
+      request.stockQuantity?.let { product.stockQuantity = it }
+      request.status?.let { product.status = it }
+      product.updatedAt = Instant.now()
+      return productRepository.save(product).toResponse()
+  }
+  ```
+
+---
+
+### 4. Standardizing Pagination: The `PagedResponse<T>` Envelope
+
+Spring Data's `Page<T>` contains framework-specific metadata (e.g. `pageable`, `sort.empty`, `numberOfElements`). Exposing `Page<T>` directly leaks framework internals to API consumers.
+
+We encapsulate paginated responses in an immutable generic envelope:
 ```kotlin
-// ❌ CRITICAL ANTI-PATTERN: NEVER make JPA Entities a data class!
-@Entity
-data class Product(
-    @Id val id: Long? = null,
-    var name: String
+data class PagedResponse<T : Any>(
+    val content: List<T>,
+    val pageNumber: Int,
+    val pageSize: Int,
+    val totalElements: Long,
+    val totalPages: Int,
+    val isFirst: Boolean,
+    val isLast: Boolean,
+    val hasNext: Boolean,
+    val hasPrevious: Boolean
 )
 ```
 
-#### Why JPA Entities Must NOT be `data class`:
+With an idiomatic Kotlin extension function:
+```kotlin
+fun <T : Any, R : Any> Page<T>.toPagedResponse(transform: (T) -> R): PagedResponse<R> = PagedResponse(
+    content = content.map(transform),
+    pageNumber = number,
+    pageSize = size,
+    totalElements = totalElements,
+    totalPages = totalPages,
+    isFirst = isFirst,
+    isLast = isLast,
+    hasNext = hasNext(),
+    hasPrevious = hasPrevious()
+)
+```
 
-| Feature of `data class` | Conflict with JPA / Hibernate |
-| :--- | :--- |
-| **Generated `equals()` & `hashCode()`** | Evaluates all constructor properties. Before an entity is saved, its `id` is `null`. If properties mutate, its hash code changes while inside a Hibernate Set/Map, corrupting the First-Level Cache. Furthermore, Hibernate proxies fail field-level equality checks. |
-| **Generated `copy()`** | `product.copy(name = "New")` creates a brand-new instance in memory that is **completely detached** from Hibernate's Persistence Context. Hibernate will not detect its dirty state. |
-| **Generated `toString()`** | Recursively traverses every property. In entities with `@ManyToOne` or `@OneToMany` relationships, this triggers unexpected SQL queries (`LazyInitializationException`) or infinite loops (`StackOverflowError`). |
+---
 
-#### The Solution:
-- Use standard `class` for JPA entities.
-- Implement `equals()` and `hashCode()` based strictly on database identity (`id != null && id == other.id`).
-- Reserve immutable `data class` exclusively for **Data Transfer Objects (DTOs)**:
+### 5. Dynamic Queries via `JpaSpecificationExecutor`
+
+Real-world e-commerce APIs require searching by keyword, filtering by price ranges, filtering by stock status, and sorting—all optionally combinable.
+
+Writing dozens of repository finder methods (`findByPriceBetweenAndStatus...`) quickly becomes unmaintainable. Instead, we use Spring Data JPA's `JpaSpecificationExecutor<T>`:
 
 ```kotlin
-// ✅ Proper JPA Entity
-@Entity
-@Table(name = "products")
-class Product(
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null,
+interface ProductRepository : JpaRepository<Product, Long>, JpaSpecificationExecutor<Product>
+```
 
-    @Column(nullable = false, unique = true)
-    var sku: String,
+In `ProductSpecifications.kt`, we use the JPA Criteria API to build dynamic predicates conditionally:
 
-    @Column(nullable = false)
-    var name: String,
+```kotlin
+object ProductSpecifications {
+    fun withFilter(criteria: ProductFilterCriteria): Specification<Product> {
+        return Specification { root, _, cb ->
+            val predicates = mutableListOf<Predicate>()
 
-    @Column(nullable = false)
-    var price: BigDecimal,
+            criteria.search?.takeIf { it.isNotBlank() }?.let { query ->
+                val pattern = "%${query.trim().lowercase()}%"
+                predicates.add(
+                    cb.or(
+                        cb.like(cb.lower(root.get("name")), pattern),
+                        cb.like(cb.lower(root.get("description")), pattern)
+                    )
+                )
+            }
 
-    @Column(nullable = false)
-    var stockQuantity: Int,
+            criteria.minPrice?.let { cb.greaterThanOrEqualTo(root.get("price"), it) }?.let(predicates::add)
+            criteria.maxPrice?.let { cb.lessThanOrEqualTo(root.get("price"), it) }?.let(predicates::add)
+            criteria.status?.let { cb.equal(root.get<ProductStatus>("status"), it) }?.let(predicates::add)
 
-    @Enumerated(EnumType.STRING)
-    var status: ProductStatus = ProductStatus.ACTIVE
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is Product) return false
-        return id != null && id == other.id
+            criteria.inStock?.let { inStock ->
+                if (inStock) cb.greaterThan(root.get("stockQuantity"), 0)
+                else cb.equal(root.get<Int>("stockQuantity"), 0)
+            }?.let(predicates::add)
+
+            if (predicates.isEmpty()) cb.conjunction() else cb.and(*predicates.toTypedArray())
+        }
     }
-
-    override fun hashCode(): Int = id?.hashCode() ?: 0
 }
-
-// ✅ Proper DTO: Immutable data class
-data class ProductResponse(
-    val id: Long,
-    val sku: String,
-    val name: String,
-    val price: BigDecimal,
-    val stockQuantity: Int,
-    val status: ProductStatus
-)
 ```
 
 ---
 
-### 4. Spring Data Kotlin Extensions: `findByIdOrNull()`
-
-In Java, `CrudRepository.findById(id)` returns `Optional<T>`. In Kotlin, working with `Optional` is verbose and unidiomatic (`optional.orElseThrow(...)`).
-
-Spring Data provides first-class Kotlin extensions in `org.springframework.data.repository.findByIdOrNull`:
-
-```kotlin
-import org.springframework.data.repository.findByIdOrNull
-
-// Java Style (Clunky in Kotlin)
-val product = productRepository.findById(id).orElseThrow { ProductNotFoundException(id) }
-
-// Idiomatic Kotlin Style (Clean Elvis Operator)
-val product = productRepository.findByIdOrNull(id) ?: throw ProductNotFoundException(id)
-```
-
----
-
-## 🏛️ Architecture Overview
+## 🏛️ REST Architecture & Request Flow
 
 ```mermaid
 sequenceDiagram
@@ -174,104 +176,87 @@ sequenceDiagram
     actor Client
     participant Controller as ProductController
     participant Service as ProductServiceImpl
-    participant Repository as ProductRepository
-    participant DB as PostgreSQL / H2
+    participant Repo as ProductRepository
+    participant DB as Database
 
-    Client->>Controller: POST /api/v1/products (ProductRequest)
-    Controller->>Service: createProduct(request)
-    Service->>Service: request.toEntity()
-    Service->>Repository: save(product)
-    Repository->>DB: INSERT INTO products ...
-    DB-->>Repository: Generated ID (e.g. 1)
-    Repository-->>Service: saved Product
-    Service->>Service: saved.toResponse()
-    Service-->>Controller: ProductResponse
-    Controller-->>Client: 201 Created (Location: /api/v1/products/1, body)
+    Client->>Controller: GET /api/v1/products?search=mouse&minPrice=20&page=0&size=10&sort=price,asc
+    Controller->>Service: getProducts(criteria, pageable)
+    Service->>Repo: findAll(ProductSpecifications.withFilter(criteria), pageable)
+    Repo->>DB: SELECT * FROM products WHERE (LOWER(name) LIKE '%mouse%') AND price >= 20.00 ORDER BY price ASC LIMIT 10 OFFSET 0
+    DB-->>Repo: Page data & total count
+    Repo-->>Service: Page<Product>
+    Service->>Service: page.toPagedResponse { it.toResponse() }
+    Service-->>Controller: PagedResponse<ProductResponse>
+    Controller-->>Client: 200 OK (Paged JSON Envelope)
 ```
 
 ---
 
 ## 🔨 Step-by-Step Implementation Guide
 
-If you are on the **`day-01-spring-boot-kotlin-starter`** branch, follow these 9 steps to implement the exercises:
+If you are on the **`day-02-rest-principles-starter`** branch, follow these 10 steps:
 
-### Step 1: Annotate the `Product` JPA Entity
-- File: `src/main/kotlin/com/example/shopcraft/product/entity/Product.kt`
-- Annotate the class with `@Entity` and `@Table(name = "products")`.
-- Annotate the primary key `id` with `@Id` and `@GeneratedValue(strategy = GenerationType.IDENTITY)`.
-- Configure column mappings:
-  - `sku`: `@Column(nullable = false, unique = true, length = 64)`.
-  - `name`: `@Column(nullable = false, length = 255)`.
-  - `description`: `@Column(columnDefinition = "TEXT")`.
-  - `price`: `@Column(nullable = false, precision = 12, scale = 2)`.
-  - `stockQuantity`: `@Column(nullable = false)`.
-  - `status`: `@Enumerated(EnumType.STRING)` and `@Column(nullable = false, length = 32)`.
-  - `createdAt`: `@Column(nullable = false, updatable = false)`.
-  - `updatedAt`: `@Column(nullable = false)`.
+### Step 1: Implement `toPagedResponse` in `PagedResponse.kt`
+- File: `src/main/kotlin/com/example/shopcraft/common/model/PagedResponse.kt`
+- Implement the `toPagedResponse` extension function on Spring Data `Page<T>` mapping elements to `R` and populating pagination metadata.
 
-### Step 2: Implement `toResponse()` on `Product`
-- File: `src/main/kotlin/com/example/shopcraft/product/entity/Product.kt`
-- Map this entity instance properties into an immutable `ProductResponse` DTO instance.
+### Step 2: Implement `withFilter` in `ProductSpecifications.kt`
+- File: `src/main/kotlin/com/example/shopcraft/product/repository/ProductSpecifications.kt`
+- Construct dynamic JPA predicates for `search` (matching name or description case-insensitively), `minPrice`, `maxPrice`, `status`, and `inStock`.
 
-### Step 3: Implement `toEntity()` on `ProductRequest`
-- File: `src/main/kotlin/com/example/shopcraft/product/dto/ProductDtos.kt`
-- Construct and return a new `Product` JPA entity populated from this request DTO attributes.
-
-### Step 4: Implement `createProduct` in `ProductServiceImpl`
+### Step 3: Implement `updateProduct` in `ProductServiceImpl`
 - File: `src/main/kotlin/com/example/shopcraft/product/service/ProductServiceImpl.kt`
-- Convert the incoming `ProductRequest` using `request.toEntity()`.
-- Persist the entity via `productRepository.save(product)`.
-- Convert and return the resulting entity using `saved.toResponse()`.
+- Retrieve entity by ID with `findByIdOrNull`, replace all mutable fields (`sku`, `name`, `description`, `price`, `stockQuantity`, `status`), update `updatedAt`, save, and return DTO.
 
-### Step 5: Implement `getProductById` in `ProductServiceImpl`
+### Step 4: Implement `patchProduct` in `ProductServiceImpl`
 - File: `src/main/kotlin/com/example/shopcraft/product/service/ProductServiceImpl.kt`
-- Retrieve the entity using `productRepository.findByIdOrNull(id)`.
-- If the result is null, throw a `ProductNotFoundException(id)` using the Elvis operator (`?:`).
-- Convert and return the entity via `.toResponse()`.
+- Retrieve entity by ID, selectively update only non-null fields provided in `ProductPatchRequest`, update `updatedAt`, save, and return DTO.
 
-### Step 6: Implement `getAllProducts` in `ProductServiceImpl`
+### Step 5: Implement `deleteProduct` in `ProductServiceImpl`
 - File: `src/main/kotlin/com/example/shopcraft/product/service/ProductServiceImpl.kt`
-- Call `productRepository.findAll()`.
-- Map each entity to its DTO counterpart using `.map { it.toResponse() }`.
+- Retrieve entity by ID (throw `ProductNotFoundException` if missing), and delete from repository.
 
-### Step 7: Implement `createProduct` in `ProductController`
-- File: `src/main/kotlin/com/example/shopcraft/product/controller/ProductController.kt`
-- Call `productService.createProduct(request)` to create the catalog item.
-- Construct an RFC-compliant URI: `URI.create("/api/v1/products/${created.id}")`.
-- Return `ResponseEntity.created(location).body(created)` with HTTP status `201 Created`.
+### Step 6: Implement `getProducts` in `ProductServiceImpl`
+- File: `src/main/kotlin/com/example/shopcraft/product/service/ProductServiceImpl.kt`
+- Generate specification from criteria, call `productRepository.findAll(spec, pageable)`, and map to `PagedResponse<ProductResponse>`.
 
-### Step 8: Implement `getProductById` in `ProductController`
+### Step 7: Implement `updateProduct` in `ProductController`
 - File: `src/main/kotlin/com/example/shopcraft/product/controller/ProductController.kt`
-- Call `productService.getProductById(id)`.
-- Return `ResponseEntity.ok(product)` with HTTP status `200 OK`.
+- Handle `PUT /api/v1/products/{id}`, delegate to service, and return `ResponseEntity.ok(updated)`.
 
-### Step 9: Implement `getAllProducts` in `ProductController`
+### Step 8: Implement `patchProduct` in `ProductController`
 - File: `src/main/kotlin/com/example/shopcraft/product/controller/ProductController.kt`
-- Call `productService.getAllProducts()`.
-- Return `ResponseEntity.ok(products)` with HTTP status `200 OK`.
+- Handle `PATCH /api/v1/products/{id}`, delegate to service, and return `ResponseEntity.ok(patched)`.
+
+### Step 9: Implement `deleteProduct` in `ProductController`
+- File: `src/main/kotlin/com/example/shopcraft/product/controller/ProductController.kt`
+- Handle `DELETE /api/v1/products/{id}`, delegate to service, and return `ResponseEntity.noContent().build()`.
+
+### Step 10: Implement `getProducts` in `ProductController`
+- File: `src/main/kotlin/com/example/shopcraft/product/controller/ProductController.kt`
+- Handle `GET /api/v1/products` accepting filter criteria and `Pageable`, delegate to service, and return `ResponseEntity.ok(pagedResponse)`.
 
 ---
 
 ## 🧪 Verification & Automated Testing
 
-All tests in this course adhere to the **Given-When-Then** BDD testing convention:
-- Function names use descriptive Kotlin backticks (e.g. `` `given valid product request, when createProduct, then persists entity and returns response` ``).
-- Test bodies are cleanly partitioned into Given, When, and Then phases using blank lines.
-
-Run the automated test suite from your terminal:
+Run the automated test suite:
 ```bash
 ./gradlew test
 ```
 
 ### Expected Output:
-- **On `day-01-spring-boot-kotlin-solution`**:
-  All 11 tests pass with **100% green**:
-  - `ShopcraftApplicationTests` (Context loads)
-  - `ProductServiceTest` (4 unit tests)
-  - `ProductControllerTest` (3 web slice tests)
-  - `ProductRepositoryTest` (3 data slice tests)
-- **On `day-01-spring-boot-kotlin-starter`**:
-  Baseline context loads test passes; Day 01 exercise tests fail with `NotImplementedError` until you complete Steps 1 through 4.
+- **On `day-02-rest-principles-solution`**:
+  All **27 tests** pass with **100% green**:
+  - `PagedResponseTest` (2 unit tests)
+  - `ProductSpecificationsTest` (5 repository slice tests)
+  - `ProductServiceTest` (8 unit tests)
+  - `ProductControllerTest` (6 web slice tests)
+  - `ProductMappingTest` (2 unit tests)
+  - `ProductRepositoryTest` (3 slice tests)
+  - `ShopcraftApplicationTests` (1 baseline test)
+- **On `day-02-rest-principles-starter`**:
+  Day 01 baseline tests pass; Day 02 exercise tests fail cleanly with `NotImplementedError` pointing directly to Steps 1 through 10.
 
 ---
 
@@ -284,9 +269,9 @@ Run the automated test suite from your terminal:
 
 2. **Execute the automated cURL test script**:
    ```bash
-   chmod +x requests/day01.curl.sh
-   ./requests/day01.curl.sh
+   chmod +x requests/day02.curl.sh
+   ./requests/day02.curl.sh
    ```
 
 3. **Or execute the HTTP requests in IntelliJ IDEA**:
-   Open `requests/day01.http` and click the green play button next to each request.
+   Open `requests/day02.http` and run the requests sequentially to observe `PUT`, `PATCH`, `DELETE 204`, and dynamic pagination in action.

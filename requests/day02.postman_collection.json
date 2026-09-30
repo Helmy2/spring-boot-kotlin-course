@@ -1,0 +1,213 @@
+{
+  "info": {
+    "_postman_id": "d2a8c3e4-15f6-4d02-a893-85903d620202",
+    "name": "ShopCraft API - Day 02: REST Principles & Dynamic Queries",
+    "description": "Postman collection covering full REST semantics (PUT, PATCH, DELETE 204, and paginated dynamic queries).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Product (POST 201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Location header is present\", function () {",
+              "    pm.response.to.have.header(\"Location\");",
+              "    const location = pm.response.headers.get(\"Location\");",
+              "    const parts = location.split('/');",
+              "    pm.collectionVariables.set(\"productId\", parts[parts.length - 1]);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-REST-001\",\n  \"name\": \"Ultra HD Monitor\",\n  \"description\": \"Crisp 4K display\",\n  \"price\": 499.99,\n  \"stockQuantity\": 15,\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      }
+    },
+    {
+      "name": "Complete Replacement (PUT 200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Fields were replaced\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.name).to.eql(\"Ultra HD Monitor Pro\");",
+              "    pm.expect(json.price).to.eql(549.99);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-REST-001\",\n  \"name\": \"Ultra HD Monitor Pro\",\n  \"description\": \"Upgraded 4K 144Hz panel\",\n  \"price\": 549.99,\n  \"stockQuantity\": 20,\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products", "{{productId}}"]
+        }
+      }
+    },
+    {
+      "name": "Partial Modification (PATCH 200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Price updated\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.price).to.eql(529.99);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"price\": 529.99\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products", "{{productId}}"]
+        }
+      }
+    },
+    {
+      "name": "Paginated & Filtered Query (GET 200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"PagedResponse envelope structure\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.have.property(\"content\");",
+              "    pm.expect(json).to.have.property(\"pageNumber\");",
+              "    pm.expect(json).to.have.property(\"pageSize\");",
+              "    pm.expect(json).to.have.property(\"totalElements\");",
+              "    pm.expect(json).to.have.property(\"totalPages\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products?page=0&size=5&sort=price,desc&search=Monitor&minPrice=100&inStock=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"],
+          "query": [
+            { "key": "page", "value": "0" },
+            { "key": "size", "value": "5" },
+            { "key": "sort", "value": "price,desc" },
+            { "key": "search", "value": "Monitor" },
+            { "key": "minPrice", "value": "100" },
+            { "key": "inStock", "value": "true" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Delete Product (DELETE 204)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status is 204 No Content\", function () {",
+              "    pm.response.to.have.status(204);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products", "{{productId}}"]
+        }
+      }
+    }
+  ]
+}
