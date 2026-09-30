@@ -1,0 +1,54 @@
+### ==============================================================================
+### ShopCraft API - Day 05: Testing Pyramid HTTP Verification
+### ==============================================================================
+
+@baseUrl = http://localhost:8080/api/v1
+
+### 1. Create Product (Valid Payload - Expect 201 Created & Location Header)
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-TST-8001",
+  "name": "Testing Pyramid Mechanical Keyboard",
+  "description": "Validated across unit, slice, and integration tests",
+  "price": 179.99,
+  "stockQuantity": 35,
+  "status": "ACTIVE"
+}
+
+### 2. Validation Failure (Blank Name & Negative Price - Expect 400 Bad Request)
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-TST-8002",
+  "name": "",
+  "price": -49.99,
+  "stockQuantity": -10,
+  "status": "ACTIVE"
+}
+
+### 3. Sku Validation Failure (Invalid Regex - Expect 400 Bad Request)
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "sku": "invalid_sku_format",
+  "name": "Invalid SKU Item",
+  "price": 29.99,
+  "stockQuantity": 10,
+  "status": "ACTIVE"
+}
+
+### 4. Fetch Product by ID (Expect 200 OK)
+GET {{baseUrl}}/products/1
+
+### 5. Fetch Non-Existent Product (Expect 404 Not Found ProblemDetail)
+GET {{baseUrl}}/products/99999
+
+### 6. Filter Products (Dynamic Query Tested in DataJpa Slice)
+GET {{baseUrl}}/products?minPrice=100.00&maxPrice=200.00&status=ACTIVE&page=0&size=5
+
+### 7. Query Admin Audit Trail (Verifying E2E Event Recording)
+GET {{baseUrl}}/admin/audit-logs?page=0&size=10
