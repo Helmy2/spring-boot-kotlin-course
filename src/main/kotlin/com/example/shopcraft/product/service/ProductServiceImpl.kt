@@ -1,5 +1,7 @@
 package com.example.shopcraft.product.service
 
+import com.example.shopcraft.audit.annotation.AuditLog
+import com.example.shopcraft.audit.annotation.TrackExecutionTime
 import com.example.shopcraft.common.exception.DuplicateResourceException
 import com.example.shopcraft.common.model.PagedResponse
 import com.example.shopcraft.common.model.toPagedResponse
@@ -22,6 +24,7 @@ class ProductServiceImpl(
     private val productRepository: ProductRepository
 ) : ProductService {
 
+    @AuditLog(action = "PRODUCT_CREATED", resourceType = "PRODUCT")
     @Transactional
     override fun createProduct(request: ProductRequest): ProductResponse {
         if (productRepository.existsBySku(request.sku)) {
@@ -32,22 +35,26 @@ class ProductServiceImpl(
         return saved.toResponse()
     }
 
+    @TrackExecutionTime(thresholdMs = 100)
     override fun getProductById(id: Long): ProductResponse {
         val product = productRepository.findByIdOrNull(id)
             ?: throw ProductNotFoundException(id)
         return product.toResponse()
     }
 
+    @TrackExecutionTime(thresholdMs = 100)
     override fun getAllProducts(): List<ProductResponse> {
         return productRepository.findAll().map { it.toResponse() }
     }
 
+    @TrackExecutionTime(thresholdMs = 100)
     override fun getProducts(criteria: ProductFilterCriteria, pageable: Pageable): PagedResponse<ProductResponse> {
         val spec = ProductSpecifications.withFilter(criteria)
         val page = productRepository.findAll(spec, pageable)
         return page.toPagedResponse { it.toResponse() }
     }
 
+    @AuditLog(action = "PRODUCT_UPDATED", resourceType = "PRODUCT")
     @Transactional
     override fun updateProduct(id: Long, request: ProductRequest): ProductResponse {
         val product = productRepository.findByIdOrNull(id)
@@ -70,6 +77,7 @@ class ProductServiceImpl(
         return updated.toResponse()
     }
 
+    @AuditLog(action = "PRODUCT_PATCHED", resourceType = "PRODUCT")
     @Transactional
     override fun patchProduct(id: Long, request: ProductPatchRequest): ProductResponse {
         val product = productRepository.findByIdOrNull(id)
@@ -86,6 +94,7 @@ class ProductServiceImpl(
         return updated.toResponse()
     }
 
+    @AuditLog(action = "PRODUCT_DELETED", resourceType = "PRODUCT")
     @Transactional
     override fun deleteProduct(id: Long) {
         val product = productRepository.findByIdOrNull(id)

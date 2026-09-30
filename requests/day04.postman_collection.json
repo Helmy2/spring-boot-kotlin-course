@@ -1,0 +1,84 @@
+{
+  "info": {
+    "_postman_id": "shopcraft-day-04-collection",
+    "name": "ShopCraft - Day 04: AOP & Audit Logging",
+    "description": "Aspect-oriented programming, performance tracking, automated audit logging and admin query endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Create Product (Triggers AuditLog)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-AUD-2001\",\n  \"name\": \"Smart Fitness Band\",\n  \"description\": \"Monitored with Spring AOP\",\n  \"price\": 59.99,\n  \"stockQuantity\": 100,\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Get Products (Triggers TrackExecutionTime)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products?page=0&size=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Query Admin Audit Logs",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/audit-logs?page=0&size=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "admin", "audit-logs"],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ]
+}
