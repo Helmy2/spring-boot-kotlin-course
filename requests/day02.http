@@ -1,0 +1,74 @@
+### Day 02: REST Principles & Dynamic Queries - Interactive REST Client
+@baseUrl = http://localhost:8080
+
+### 1. Create Product 1 (POST 201 Created + Location)
+POST {{baseUrl}}/api/v1/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-KEY-0001",
+  "name": "Mechanical Keyboard",
+  "description": "RGB tactile switches for gaming",
+  "price": 149.99,
+  "stockQuantity": 25,
+  "status": "ACTIVE"
+}
+
+### 2. Create Product 2 (POST 201 Created + Location)
+POST {{baseUrl}}/api/v1/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-MOU-0002",
+  "name": "Wireless Ergonomic Mouse",
+  "description": "Precision productivity mouse",
+  "price": 69.99,
+  "stockQuantity": 0,
+  "status": "ACTIVE"
+}
+
+### 3. Create Product 3 (Draft Status)
+POST {{baseUrl}}/api/v1/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-PAD-0003",
+  "name": "Desk Mat Pad",
+  "description": "Extra large water-resistant desk mat",
+  "price": 29.99,
+  "stockQuantity": 50,
+  "status": "DRAFT"
+}
+
+### 4. Complete Replacement (PUT 200 OK)
+PUT {{baseUrl}}/api/v1/products/1
+Content-Type: application/json
+
+{
+  "sku": "SKU-KEY-0001",
+  "name": "Mechanical Gaming Keyboard Pro",
+  "description": "Upgraded hot-swappable tactile switches",
+  "price": 169.99,
+  "stockQuantity": 30,
+  "status": "ACTIVE"
+}
+
+### 5. Partial Modification (PATCH 200 OK)
+PATCH {{baseUrl}}/api/v1/products/1
+Content-Type: application/json
+
+{
+  "price": 159.99,
+  "stockQuantity": 45
+}
+
+### 6. Paginated & Sorted Query (GET 200 OK)
+GET {{baseUrl}}/api/v1/products?page=0&size=2&sort=price,desc
+Accept: application/json
+
+### 7. Dynamic Search & Filters (GET 200 OK)
+GET {{baseUrl}}/api/v1/products?search=keyboard&minPrice=100&maxPrice=200&status=ACTIVE&inStock=true
+Accept: application/json
+
+### 8. Resource Removal (DELETE 204 No Content)
+DELETE {{baseUrl}}/api/v1/products/3
