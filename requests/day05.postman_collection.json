@@ -1,0 +1,132 @@
+{
+  "info": {
+    "_postman_id": "shopcraft-day-05-collection",
+    "name": "ShopCraft - Day 05: Testing Pyramid",
+    "description": "Integration and slice verification requests testing the HTTP contracts, validation, error formats, and audit trail.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Create Product (Valid)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-POSTMAN-501\",\n  \"name\": \"Postman Test Keyboard\",\n  \"description\": \"Pyramid testing suite validation\",\n  \"price\": 149.99,\n  \"stockQuantity\": 30,\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Create Product (Validation Failure)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"invalid_sku\",\n  \"name\": \"\",\n  \"price\": -20.00,\n  \"stockQuantity\": -1\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Get Non-Existent Product (404 ProblemDetail)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products/99999",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products", "99999"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4. Filter Products (Dynamic Query)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products?minPrice=100.00&maxPrice=200.00&status=ACTIVE&page=0&size=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"],
+          "query": [
+            {
+              "key": "minPrice",
+              "value": "100.00"
+            },
+            {
+              "key": "maxPrice",
+              "value": "200.00"
+            },
+            {
+              "key": "status",
+              "value": "ACTIVE"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Query Admin Audit Logs",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/audit-logs?page=0&size=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "admin", "audit-logs"],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ]
+}
