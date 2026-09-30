@@ -6,6 +6,7 @@ import com.example.shopcraft.product.dto.ProductPatchRequest
 import com.example.shopcraft.product.dto.ProductRequest
 import com.example.shopcraft.product.dto.ProductResponse
 import com.example.shopcraft.product.service.ProductService
+import jakarta.validation.Valid
 import org.springframework.data.domain.Pageable
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -25,6 +26,7 @@ class ProductController(
     private val productService: ProductService
 ) {
 
+    // TODO: Step 9 - Enable request body validation by adding the @Valid annotation to the @RequestBody parameter
     @PostMapping
     fun createProduct(@RequestBody request: ProductRequest): ResponseEntity<ProductResponse> {
         val created = productService.createProduct(request)
@@ -47,6 +49,7 @@ class ProductController(
         return ResponseEntity.ok(pagedProducts)
     }
 
+    // TODO: Step 9 - Enable request body validation by adding the @Valid annotation to the @RequestBody parameter
     @PutMapping("/{id}")
     fun updateProduct(
         @PathVariable id: Long,
@@ -56,6 +59,7 @@ class ProductController(
         return ResponseEntity.ok(updated)
     }
 
+    // TODO: Step 9 - Enable request body validation by adding the @Valid annotation to the @RequestBody parameter
     @PatchMapping("/{id}")
     fun patchProduct(
         @PathVariable id: Long,

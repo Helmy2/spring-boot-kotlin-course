@@ -1,0 +1,117 @@
+{
+  "info": {
+    "_postman_id": "shopcraft-day-03-collection",
+    "name": "ShopCraft - Day 03: Validation & Error Handling",
+    "description": "Validation constraints, custom @ValidSku validator, RFC 7807 ProblemDetail and error scenarios.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Create Product (Valid 201)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-ELC-1001\",\n  \"name\": \"Wireless Mechanical Keyboard\",\n  \"description\": \"Hot-swappable switches with Bluetooth\",\n  \"price\": 149.99,\n  \"stockQuantity\": 35,\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Create Product - Validation Failure (400 Bad Request)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"invalid-sku-pattern\",\n  \"name\": \"\",\n  \"price\": -10.00,\n  \"stockQuantity\": -5\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Create Product - Duplicate SKU Conflict (409 Conflict)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-ELC-1001\",\n  \"name\": \"Another Keyboard with Same SKU\",\n  \"price\": 99.99,\n  \"stockQuantity\": 10,\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4. Get Product By ID - Not Found (404 Not Found)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products/999999",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products", "999999"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Create Product - Malformed JSON (400 Bad Request)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"SKU-ELC-2002\",\n  \"name\": \"Broken JSON\","
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "products"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ]
+}

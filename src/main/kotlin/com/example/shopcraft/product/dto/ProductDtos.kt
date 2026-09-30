@@ -2,9 +2,22 @@ package com.example.shopcraft.product.dto
 
 import com.example.shopcraft.product.entity.Product
 import com.example.shopcraft.product.entity.ProductStatus
+import com.example.shopcraft.product.validation.ValidSku
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Positive
+import jakarta.validation.constraints.Size
 import java.math.BigDecimal
 import java.time.Instant
 
+// TODO: Step 2 - Apply Jakarta Bean Validation constraints using Kotlin @field: use-site targets:
+// - @field:NotBlank(message = "SKU must not be blank") and @field:ValidSku on sku
+// - @field:NotBlank(message = "Name must not be blank") and @field:Size(min = 2, max = 100, message = "Name must be between 2 and 100 characters") on name
+// - @field:Size(max = 1000, message = "Description must not exceed 1000 characters") on description
+// - @field:NotNull(message = "Price is required") and @field:Positive(message = "Price must be strictly positive") on price
+// - @field:NotNull(message = "Stock quantity is required") and @field:Min(value = 0, message = "Stock quantity must be zero or positive") on stockQuantity
+// - @field:NotNull(message = "Status is required") on status
 data class ProductRequest(
     val sku: String,
     val name: String,
@@ -36,10 +49,18 @@ data class ProductResponse(
 )
 
 data class ProductPatchRequest(
+    @field:Size(min = 2, max = 100, message = "Name must be between 2 and 100 characters")
     val name: String? = null,
+
+    @field:Size(max = 1000, message = "Description must not exceed 1000 characters")
     val description: String? = null,
+
+    @field:Positive(message = "Price must be strictly positive")
     val price: BigDecimal? = null,
+
+    @field:Min(value = 0, message = "Stock quantity must be zero or positive")
     val stockQuantity: Int? = null,
+
     val status: ProductStatus? = null
 )
 
