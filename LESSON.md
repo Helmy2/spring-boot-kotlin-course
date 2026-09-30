@@ -1,218 +1,139 @@
-# Day 03: Validation, Error Handling & RFC 7807 Problem Details
+# Day 04: Aspect-Oriented Programming (AOP) & Audit Logging
 
-Welcome to **Day 03** of the ShopCraft Backend Master Course. In this module, you will learn how to enforce data integrity at the HTTP boundary using Jakarta Bean Validation, harness Kotlin use-site targets, craft custom constraint validators, and build a production-grade centralized exception handling architecture adhering to the RFC 7807 `ProblemDetail` standard.
+Welcome to **Day 04** of the ShopCraft Backend Master Course. In this module, you will learn how to decouple cross-cutting concerns from core business logic using Spring AOP, implement performance telemetry with `@Around` advice, build an automated auditing system with `@AfterReturning`, and enforce transactional isolation using `Propagation.REQUIRES_NEW`.
 
 ---
 
 ## 🎯 Learning Objectives
 
 By the end of this module, you will master:
-1. **Jakarta Bean Validation**: Applying constraints (`@NotBlank`, `@Size`, `@Positive`, `@Min`, `@NotNull`) to incoming DTOs.
-2. **Kotlin Use-Site Targets**: Understanding Kotlin property compilation and why `@field:` is mandatory when annotating constructor properties in data classes for Bean Validation.
-3. **Custom Constraint Validation**: Creating custom annotations (`@ValidSku`) and validators (`SkuValidator : ConstraintValidator<ValidSku, String?>`) with regex pattern enforcement (`^SKU-[A-Z]{3}-\d{4}$`).
-4. **RFC 7807 `ProblemDetail`**: Implementing modern Spring Boot error responses using `org.springframework.http.ProblemDetail` enriched with structured error collections and timestamps.
-5. **Centralized Exception Handling**: Crafting `@RestControllerAdvice` methods for `MethodArgumentNotValidException`, `ResourceNotFoundException`, `DuplicateResourceException`, and malformed payloads.
-6. **Controller Integration**: Activating request validation using `@Valid` on controller endpoints.
+1. **Aspect-Oriented Programming (AOP)**: Understanding core concepts—Join Points, Pointcut designators, Advice types (`@Around`, `@AfterReturning`), and runtime proxy mechanics.
+2. **Performance Telemetry**: Creating custom `@TrackExecutionTime` annotations and `@Around` advice to profile execution duration and log warnings on latency regressions.
+3. **Automated Audit Logging**: Capturing state-mutating operations transparently using `@AuditLog` and `@AfterReturning` advice without polluting domain services.
+4. **Transactional Isolation (`Propagation.REQUIRES_NEW`)**: Persisting audit events in an independent transaction so audit records survive business transaction rollbacks.
+5. **Admin Querying API**: Exposing `GET /api/v1/admin/audit-logs` returning a paginated history using the `PagedResponse` envelope.
 
 ---
 
-## 🔬 Theoretical Foundations & Kotlin Mechanics
+## 🔬 Theoretical Foundations & Spring AOP Mechanics
 
-### 1. The Kotlin Use-Site Target Problem
+### 1. Cross-Cutting Concerns & AOP Terminology
 
-In Kotlin, a concise primary constructor property declaration:
-```kotlin
-data class ProductRequest(
-    val name: String
-)
-```
-actually compiles to three separate bytecode elements:
-1. A constructor parameter in the generated constructor: `String name`
-2. A private backing field: `private final String name`
-3. A public getter method: `public final String getName()`
+In enterprise systems, non-functional concerns (logging, security checks, metrics, transaction management, caching) cut across multiple domain services. Mixing these into service methods violates the Single Responsibility Principle and degrades maintainability.
 
-When an annotation without a specified target is placed on a constructor property:
-```kotlin
-data class ProductRequest(
-    @NotBlank val name: String
-)
-```
-Kotlin defaults to placing the annotation on the **constructor parameter** or property, depending on compiler settings. However, Jakarta Bean Validation (Hibernate Validator) runtime reflection inspects **fields** or **getter methods** on the instantiated bean!
+Spring AOP uses dynamic proxies to intercept method executions:
 
-To guarantee that Jakarta Bean Validation detects the constraint during HTTP request body deserialization, you must explicitly declare the **use-site target**:
-```kotlin
-data class ProductRequest(
-    @field:NotBlank(message = "Name must not be blank")
-    @field:Size(min = 2, max = 100, message = "Name must be between 2 and 100 characters")
-    val name: String
-)
-```
-
-Common Kotlin use-site targets include:
-- `@field:` – Backing field of the property.
-- `@get:` – Property getter.
-- `@param:` – Constructor parameter.
-- `@set:` – Property setter.
-
----
-
-### 2. Custom Constraint Architecture
-
-When built-in annotations do not cover domain-specific formats (e.g. ShopCraft SKU format `SKU-XXX-0000`), Jakarta Bean Validation provides an extensible SPI:
+- **Join Point**: A candidate point in the execution of the program where an aspect can be plugged in. In Spring AOP, this is always a method execution.
+- **Pointcut**: A predicate expression that matches join points. For example: `@annotation(com.example.shopcraft.audit.annotation.AuditLog)` matches any method annotated with `@AuditLog`.
+- **Advice**: Action taken by an aspect at a particular join point.
+  - `@Before`: Runs before the join point method executes.
+  - `@AfterReturning`: Runs after the join point completes successfully without throwing an exception. Can access the returned value.
+  - `@AfterThrowing`: Runs if the method throws an exception.
+  - `@After`: Runs after the method completes (regardless of success or failure).
+  - `@Around`: Surrounds the join point method. Has full control over whether and when to invoke `joinPoint.proceed()`, can alter arguments or return values, and measures execution duration.
+- **Aspect**: A modularization of a cross-cutting concern encapsulating pointcuts and advice.
 
 ```mermaid
-classDiagram
-    class ValidSku {
-        <<annotation>>
-        +String message
-        +Class[] groups
-        +Class[] payload
-    }
-    class SkuValidator {
-        -Regex skuRegex
-        +isValid(String, ConstraintValidatorContext) Boolean
-    }
-    ConstraintValidator <|.. SkuValidator : implements
-    ValidSku ..> SkuValidator : @Constraint(validatedBy = [SkuValidator::class])
-```
-
-#### Best Practices for Custom Validators:
-- **Null Safety**: Always return `true` when the value is `null`. Nullability constraints should be handled independently by `@NotNull` or `@NotBlank`. This honors the Single Responsibility Principle.
-- **Compiled Regex**: Store regex patterns in static/singleton variables (`Regex("^SKU-[A-Z]{3}-\\d{4}$")`) rather than recompiling the pattern on every request invocation.
-
----
-
-### 3. RFC 7807 Problem Details for HTTP APIs
-
-Before RFC 7807, APIs returned disparate error shapes (e.g. `{ "error": "...", "status": 400 }` or `{ "msg": "..." }`). RFC 7807 defines a standardized JSON structure with standard top-level keys:
-- `type`: URI identifying the error problem type.
-- `title`: Short, human-readable summary.
-- `status`: HTTP status code.
-- `detail`: Human-readable explanation specific to this occurrence.
-- `instance`: URI of the resource/endpoint where the error occurred.
-
-Spring Boot 3/4 includes `org.springframework.http.ProblemDetail`, allowing custom extension attributes via `.setProperty("key", value)`:
-
-```json
-{
-  "type": "https://shopcraft.example.com/errors/validation-failed",
-  "title": "Validation Failed",
-  "status": 400,
-  "detail": "Validation failed for 2 field(s)",
-  "instance": "/api/v1/products",
-  "timestamp": "2026-09-30T10:15:30.123456Z",
-  "errors": [
-    {
-      "field": "name",
-      "rejectedValue": "",
-      "message": "Name must not be blank"
-    },
-    {
-      "field": "price",
-      "rejectedValue": -5.00,
-      "message": "Price must be strictly positive"
-    }
-  ]
-}
+graph TD
+    Client[HTTP Client] --> Controller[ProductController]
+    Controller --> Proxy[Spring AOP Proxy]
+    
+    subgraph AOP Aspect Interceptors
+        ExecAspect[ExecutionTimeAspect - @Around]
+        AuditAspect[AuditLogAspect - @AfterReturning]
+    end
+    
+    Proxy --> ExecAspect
+    ExecAspect --> AuditAspect
+    AuditAspect --> Service[ProductServiceImpl]
+    Service --> ProdRepo[(Product Repository)]
+    AuditAspect -. records event .-> AuditSvc[AuditService - REQUIRES_NEW]
+    AuditSvc --> AuditRepo[(Audit Repository)]
 ```
 
 ---
 
-## 🏛️ Request Validation & Error Flow Architecture
+### 2. Transactional Isolation via `Propagation.REQUIRES_NEW`
+
+When auditing business operations, saving audit records inside the same database transaction as the business operation introduces a critical vulnerability:
+If the business operation encounters an error or rolls back, the audit record is rolled back with it!
+
+Spring's `@Transactional(propagation = Propagation.REQUIRES_NEW)` solves this:
+1. When `recordEvent(...)` is invoked, Spring suspends the caller's active transaction.
+2. Spring opens a brand new, isolated physical database connection/transaction.
+3. The `AuditEvent` is persisted and immediately committed.
+4. Spring resumes the caller's outer transaction.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client
+    actor Admin/User
     participant Controller as ProductController
-    participant Adv as GlobalExceptionHandler
-    participant Svc as ProductService
-    participant Repo as ProductRepository
+    participant Service as ProductService
+    participant Aspect as AuditLogAspect
+    participant AuditSvc as AuditService (REQUIRES_NEW)
+    participant DB as Database
 
-    Client->>Controller: POST /api/v1/products (Invalid SKU)
-    Controller-->>Adv: MethodArgumentNotValidException
-    Adv-->>Client: 400 Bad Request (RFC 7807 ProblemDetail + errors array)
-
-    Client->>Controller: POST /api/v1/products (Existing SKU)
-    Controller->>Svc: createProduct(request)
-    Svc->>Repo: existsBySku("SKU-DUP-0001")
-    Repo-->>Svc: true
-    Svc-->>Adv: DuplicateResourceException("Product with SKU already exists")
-    Adv-->>Client: 409 Conflict (RFC 7807 ProblemDetail)
-
-    Client->>Controller: GET /api/v1/products/999
-    Controller->>Svc: getProductById(999)
-    Svc->>Repo: findById(999)
-    Repo-->>Svc: empty
-    Svc-->>Adv: ProductNotFoundException(999)
-    Adv-->>Client: 404 Not Found (RFC 7807 ProblemDetail)
+    Admin/User->>Controller: POST /api/v1/products
+    Controller->>Service: createProduct(request)
+    Service->>DB: INSERT INTO products (TX 1 - Active)
+    Service-->>Aspect: returns ProductResponse(id=100)
+    Aspect->>AuditSvc: recordEvent(action="PRODUCT_CREATED", resourceId="100")
+    Note over AuditSvc,DB: Suspends TX 1 -> Begins TX 2
+    AuditSvc->>DB: INSERT INTO audit_events (TX 2)
+    Note over AuditSvc,DB: Commits TX 2 -> Resumes TX 1
+    Aspect-->>Controller: returns response
+    Controller-->>Admin/User: 201 Created
 ```
 
 ---
 
 ## 🛠️ Step-by-Step Exercise Walkthrough (Starter Progression)
 
-When working on `day-03-validation-error-handling-starter`, complete the 9 guided steps:
+When working on `day-04-aop-starter`, complete the 7 guided steps:
 
-### Step 1: Implement `SkuValidator`
-- File: `src/main/kotlin/com/example/shopcraft/product/validation/SkuValidator.kt`
-- Implement `isValid(value: String?, context: ConstraintValidatorContext?): Boolean`.
-- Return `true` if `value` is `null`.
-- Test against regex `^SKU-[A-Z]{3}-\d{4}$`.
+### Step 1: Implement `AuditEvent.toResponse`
+- File: `src/main/kotlin/com/example/shopcraft/audit/entity/AuditEvent.kt`
+- Map the entity properties to an immutable `AuditEventResponse` DTO.
 
-### Step 2: Annotate `ProductRequest` with Validation Constraints
-- File: `src/main/kotlin/com/example/shopcraft/product/dto/ProductDtos.kt`
-- Use `@field:` use-site targets on all constructor properties:
-  - `sku`: `@field:NotBlank`, `@field:ValidSku`
-  - `name`: `@field:NotBlank`, `@field:Size(min = 2, max = 100)`
-  - `description`: `@field:Size(max = 1000)`
-  - `price`: `@field:NotNull`, `@field:Positive`
-  - `stockQuantity`: `@field:NotNull`, `@field:Min(0)`
-  - `status`: `@field:NotNull`
+### Step 2: Implement `recordEvent` in `AuditServiceImpl`
+- File: `src/main/kotlin/com/example/shopcraft/audit/service/AuditServiceImpl.kt`
+- Annotate with `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
+- Instantiate an `AuditEvent` entity with parameters, save it via `auditEventRepository`, and return its DTO.
 
-### Step 3: Enforce SKU Uniqueness in `ProductServiceImpl.createProduct`
+### Step 3: Implement `getAuditEvents` in `AuditServiceImpl`
+- File: `src/main/kotlin/com/example/shopcraft/audit/service/AuditServiceImpl.kt`
+- Query `auditEventRepository.findAllByOrderByTimestampDesc(pageable)`.
+- Transform the `Page<AuditEvent>` into `PagedResponse<AuditEventResponse>`.
+
+### Step 4: Implement `measureExecutionTime` in `ExecutionTimeAspect`
+- File: `src/main/kotlin/com/example/shopcraft/audit/aspect/ExecutionTimeAspect.kt`
+- Use `@Around("@annotation(trackExecutionTime)")`.
+- Record start time, proceed with `joinPoint.proceed()`, compute duration, and log a warning if duration exceeds `trackExecutionTime.thresholdMs`.
+
+### Step 5: Implement `logSuccessfulOperation` in `AuditLogAspect`
+- File: `src/main/kotlin/com/example/shopcraft/audit/aspect/AuditLogAspect.kt`
+- Use `@AfterReturning(pointcut = "@annotation(auditLog)", returning = "result")`.
+- Extract resource ID from `result` (if `ProductResponse`) or method arguments.
+- Call `auditService.recordEvent(...)`.
+
+### Step 6: Annotate `ProductServiceImpl` Methods
 - File: `src/main/kotlin/com/example/shopcraft/product/service/ProductServiceImpl.kt`
-- Check `productRepository.existsBySku(request.sku)`.
-- If `true`, throw `DuplicateResourceException("Product with SKU '${request.sku}' already exists")`.
+- Apply `@TrackExecutionTime(thresholdMs = 100)` on queries (`getProducts`, `getAllProducts`, `getProductById`).
+- Apply `@AuditLog` on mutating methods (`createProduct`, `updateProduct`, `patchProduct`, `deleteProduct`).
 
-### Step 4: Enforce SKU Uniqueness in `ProductServiceImpl.updateProduct`
-- File: `src/main/kotlin/com/example/shopcraft/product/service/ProductServiceImpl.kt`
-- Check `productRepository.findBySku(request.sku)`.
-- If an existing entity has the same SKU and a different `id`, throw `DuplicateResourceException`.
-
-### Step 5: Implement `handleValidationException` in `GlobalExceptionHandler`
-- File: `src/main/kotlin/com/example/shopcraft/common/exception/GlobalExceptionHandler.kt`
-- Extract all `fieldErrors` from `BindingResult` into `FieldErrorDetail(field, rejectedValue, message)`.
-- Construct `ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ...)`.
-- Attach `title = "Validation Failed"`, `timestamp = Instant.now()`, and `errors = fieldErrors`.
-
-### Step 6: Implement `handleResourceNotFoundException` in `GlobalExceptionHandler`
-- File: `src/main/kotlin/com/example/shopcraft/common/exception/GlobalExceptionHandler.kt`
-- Construct `ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.message)`.
-- Attach `title = "Resource Not Found"` and `timestamp`.
-
-### Step 7: Implement `handleDuplicateResourceException` in `GlobalExceptionHandler`
-- File: `src/main/kotlin/com/example/shopcraft/common/exception/GlobalExceptionHandler.kt`
-- Construct `ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.message)`.
-- Attach `title = "Resource Conflict"` and `timestamp`.
-
-### Step 8: Implement `handleMessageNotReadableException` in `GlobalExceptionHandler`
-- File: `src/main/kotlin/com/example/shopcraft/common/exception/GlobalExceptionHandler.kt`
-- Construct `ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Malformed JSON request body...")`.
-- Attach `title = "Malformed Request Body"` and `timestamp`.
-
-### Step 9: Annotate Controller Endpoints with `@Valid`
-- File: `src/main/kotlin/com/example/shopcraft/product/controller/ProductController.kt`
-- Annotate `@Valid @RequestBody request: ProductRequest` on `createProduct` and `updateProduct`.
-- Annotate `@Valid @RequestBody request: ProductPatchRequest` on `patchProduct`.
+### Step 7: Implement `getAuditLogs` in `AdminAuditController`
+- File: `src/main/kotlin/com/example/shopcraft/audit/controller/AdminAuditController.kt`
+- Annotate endpoint with `@GetMapping`.
+- Delegate to `auditService.getAuditEvents(pageable)` and return `200 OK` with `PagedResponse`.
 
 ---
 
 ## 🧪 Verification & Automated Testing
 
 All tests in this course adhere to the **Given-When-Then** BDD testing convention:
-- Test method names use descriptive Kotlin backticks.
-- Test bodies are cleanly partitioned into Given, When, and Then phases using blank lines only (no `// Given` comments).
+- Function names use descriptive Kotlin backticks.
+- Test bodies are cleanly partitioned into Given, When, and Then phases using blank lines only.
 - Redundant `@DisplayName` annotations are omitted.
 
 Run the test suite from your terminal:
@@ -221,30 +142,28 @@ Run the test suite from your terminal:
 ```
 
 ### Expected Output:
-- **On `day-03-validation-error-handling-solution`**:
-  All **44 tests** pass with **100% green**:
-  - `SkuValidatorTest` (5 unit tests)
-  - `GlobalExceptionHandlerTest` (4 unit tests)
-  - `ProductControllerTest` (11 web slice tests)
-  - `ProductServiceTest` (10 unit tests)
-  - `ProductSpecificationsTest` (5 repository slice tests)
-  - `ProductRepositoryTest` (3 slice tests)
-  - `ProductMappingTest` (2 unit tests)
-  - `PagedResponseTest` (2 unit tests)
-  - `ShopcraftApplicationTests` (1 context baseline)
-- **On `day-03-validation-error-handling-starter`**:
-  Day 01 and Day 02 tests pass; Day 03 exercise tests fail cleanly with `NotImplementedError` or assertion errors pointing directly to Steps 1 through 9.
+- **On `day-04-aop-solution`**:
+  All **50+ tests** pass with **100% green**:
+  - `ExecutionTimeAspectTest` (2 unit tests)
+  - `AuditLogAspectTest` (2 unit tests)
+  - `AuditServiceTest` (2 unit tests)
+  - `AdminAuditControllerTest` (1 web slice test)
+  - `AuditEventRepositoryTest` (2 data slice tests)
+  - `AuditIntegrationTest` (1 integration test)
+  - All baseline Day 01-03 test suites (44 tests)
+- **On `day-04-aop-starter`**:
+  Baseline tests pass; Day 04 exercise tests fail cleanly with `NotImplementedError` or assertion errors pointing directly to Steps 1 through 7.
 
 ---
 
 ## 🌐 Manual Verification with HTTP / cURL / Postman
 
 Test fixtures are provided in the [`requests/`](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/requests) directory:
-- **`requests/day03.http`**: IntelliJ IDEA & VS Code REST client definitions.
-- **`requests/day03.curl.sh`**: Executable script hitting validation and exception endpoints.
-- **`requests/day03.postman_collection.json`**: Postman v2.1 collection with response assertion scripts.
+- **`requests/day04.http`**: IntelliJ IDEA & VS Code REST client definitions.
+- **`requests/day04.curl.sh`**: Executable script creating products and querying audit records.
+- **`requests/day04.postman_collection.json`**: Postman v2.1 collection with response assertion scripts.
 
 Run the cURL suite against a running server:
 ```bash
-./requests/day03.curl.sh
+./requests/day04.curl.sh
 ```

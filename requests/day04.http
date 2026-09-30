@@ -1,0 +1,48 @@
+### ==============================================================================
+### ShopCraft API - Day 04: AOP & Audit Logging HTTP Requests
+### ==============================================================================
+
+@baseUrl = http://localhost:8080/api/v1
+
+### 1. Create Product (Triggers AOP @AuditLog: PRODUCT_CREATED)
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-AUD-1001",
+  "name": "Audit Tracked Ultra Keyboard",
+  "description": "Mechanically intercepted and logged by Spring AOP",
+  "price": 199.99,
+  "stockQuantity": 20,
+  "status": "ACTIVE"
+}
+
+### 2. Update Product (Triggers AOP @AuditLog: PRODUCT_UPDATED)
+PUT {{baseUrl}}/products/1
+Content-Type: application/json
+
+{
+  "sku": "SKU-AUD-1001",
+  "name": "Updated Audit Ultra Keyboard",
+  "description": "Updated switches with RGB backlight",
+  "price": 219.99,
+  "stockQuantity": 18,
+  "status": "ACTIVE"
+}
+
+### 3. Patch Product (Triggers AOP @AuditLog: PRODUCT_PATCHED)
+PATCH {{baseUrl}}/products/1
+Content-Type: application/json
+
+{
+  "price": 189.99
+}
+
+### 4. Delete Product (Triggers AOP @AuditLog: PRODUCT_DELETED)
+DELETE {{baseUrl}}/products/1
+
+### 5. Get Products (Triggers AOP @TrackExecutionTime performance profiling)
+GET {{baseUrl}}/products?page=0&size=10
+
+### 6. Admin: Query Audit Logs (PagedResponse of captured audit events)
+GET {{baseUrl}}/admin/audit-logs?page=0&size=10
