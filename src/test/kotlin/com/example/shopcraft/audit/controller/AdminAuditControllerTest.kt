@@ -18,10 +18,12 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.security.test.context.support.WithMockUser
 import java.time.Instant
 
 @WebMvcTest(AdminAuditController::class)
 @Import(SecurityConfig::class, GlobalExceptionHandler::class)
+@WithMockUser(roles = ["ADMIN"])
 class AdminAuditControllerTest {
 
     @Autowired

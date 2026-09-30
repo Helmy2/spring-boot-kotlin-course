@@ -1,0 +1,95 @@
+### ==============================================================================
+### ShopCraft API - Day 06: JWT Authentication & RBAC HTTP Verification
+### ==============================================================================
+
+@baseUrl = http://localhost:8080/api/v1
+
+### 1. Register New Customer Account (Returns 201 Created & JWT Token)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "customer.test@example.com",
+  "password": "Password123!",
+  "fullName": "Test Customer"
+}
+
+### 2. Login as Customer (Returns 200 OK & Bearer Token)
+# @name customerLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@shopcraft.com",
+  "password": "Customer123!"
+}
+
+### Store Customer Token
+@customerToken = {{customerLogin.response.body.token}}
+
+### 3. Login as Administrator (Returns 200 OK & Bearer Token)
+# @name adminLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@shopcraft.com",
+  "password": "Admin123!"
+}
+
+### Store Admin Token
+@adminToken = {{adminLogin.response.body.token}}
+
+### 4. Get Current User Profile (Requires Authentication)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{customerToken}}
+
+### 5. Browse Products (Public Access - No Token Required - Expect 200 OK)
+GET {{baseUrl}}/products?page=0&size=5
+
+### 6. Create Product as Anonymous (Expect 401 Unauthorized ProblemDetail)
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "sku": "SKU-ELC-7001",
+  "name": "Anonymous Attempt Product",
+  "price": 99.99,
+  "stockQuantity": 10,
+  "status": "ACTIVE"
+}
+
+### 7. Create Product as Customer (Expect 403 Forbidden ProblemDetail)
+POST {{baseUrl}}/products
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "sku": "SKU-ELC-7002",
+  "name": "Customer Attempt Product",
+  "price": 99.99,
+  "stockQuantity": 10,
+  "status": "ACTIVE"
+}
+
+### 8. Create Product as Administrator (Expect 201 Created & Location Header)
+POST {{baseUrl}}/products
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "sku": "SKU-ELC-7003",
+  "name": "Admin Authorized Gaming Monitor",
+  "description": "High refresh rate IPS display",
+  "price": 349.99,
+  "stockQuantity": 15,
+  "status": "ACTIVE"
+}
+
+### 9. Query Audit Trail as Customer (Expect 403 Forbidden)
+GET {{baseUrl}}/admin/audit-logs
+Authorization: Bearer {{customerToken}}
+
+### 10. Query Audit Trail as Administrator (Expect 200 OK)
+GET {{baseUrl}}/admin/audit-logs?page=0&size=10
+Authorization: Bearer {{adminToken}}

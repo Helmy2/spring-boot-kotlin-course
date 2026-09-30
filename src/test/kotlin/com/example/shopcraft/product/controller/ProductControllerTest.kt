@@ -32,11 +32,13 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.security.test.context.support.WithMockUser
 import java.math.BigDecimal
 import java.time.Instant
 
 @WebMvcTest(ProductController::class)
 @Import(SecurityConfig::class, GlobalExceptionHandler::class)
+@WithMockUser(roles = ["ADMIN"])
 class ProductControllerTest {
 
     @Autowired

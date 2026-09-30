@@ -22,8 +22,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
+import org.springframework.security.test.context.support.WithMockUser
+
 @WebMvcTest(ProductController::class)
 @Import(SecurityConfig::class, GlobalExceptionHandler::class)
+@WithMockUser(roles = ["ADMIN"])
 class ProductControllerWebMvcSliceTest {
 
     @Autowired
