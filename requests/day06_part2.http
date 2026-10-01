@@ -1,0 +1,78 @@
+### ==============================================================================
+### ShopCraft API - Day 06 Part 2: Refresh Token Mechanism & Rotation HTTP Verification
+### ==============================================================================
+
+@baseUrl = http://localhost:8080/api/v1
+
+### 1. Register New Account (Returns 201 Created with Access Token & Refresh Token)
+# @name registerUser
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "part2.tester@example.com",
+  "password": "Password123!",
+  "fullName": "Part Two Tester"
+}
+
+### Store Initial Refresh Token
+@initialRefreshToken = {{registerUser.response.body.refreshToken}}
+
+### 2. Login to Obtain Access Token & Refresh Token
+# @name userLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "part2.tester@example.com",
+  "password": "Password123!"
+}
+
+### Store Login Refresh Token
+@loginRefreshToken = {{userLogin.response.body.refreshToken}}
+@accessToken = {{userLogin.response.body.token}}
+
+### 3. Access Protected Endpoint with Short-Lived Access Token
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{accessToken}}
+
+### 4. Exchange Refresh Token for New Token Pair (Rotation)
+# @name refreshTokenCall
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{loginRefreshToken}}"
+}
+
+### Store Rotated Refresh Token and New Access Token
+@rotatedRefreshToken = {{refreshTokenCall.response.body.refreshToken}}
+@newAccessToken = {{refreshTokenCall.response.body.token}}
+
+### 5. Access Protected Endpoint with New Access Token
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{newAccessToken}}
+
+### 6. Reuse Old (Rotated) Refresh Token (Expect 401 Unauthorized & Token Reuse Detection)
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{loginRefreshToken}}"
+}
+
+### 7. User Logout (Revokes Active Refresh Token)
+POST {{baseUrl}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{rotatedRefreshToken}}"
+}
+
+### 8. Attempt Refresh with Revoked Token (Expect 401 Unauthorized)
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{rotatedRefreshToken}}"
+}
