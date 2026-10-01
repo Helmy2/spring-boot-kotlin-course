@@ -31,6 +31,9 @@ class User(
     @Column(nullable = false)
     var role: Role = Role.ROLE_USER,
 
+    @Column(nullable = false)
+    var provider: String = "LOCAL",
+
     @Column(nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),
 

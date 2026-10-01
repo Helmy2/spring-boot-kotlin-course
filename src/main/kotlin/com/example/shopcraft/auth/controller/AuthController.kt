@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
@@ -46,6 +47,11 @@ class AuthController(
     fun logout(@Valid @RequestBody request: RefreshTokenRequest): ResponseEntity<Unit> {
         authService.logout(request)
         return ResponseEntity.noContent().build()
+    }
+
+    // TODO: Map to GET /oauth2/callback, accept @RequestParam token: String and @RequestParam refreshToken: String, and return 200 OK with map of tokens
+    fun oauth2Callback(token: String, refreshToken: String): ResponseEntity<Map<String, String>> {
+        TODO("Step 4 - Return map of token, refreshToken, and tokenType in ResponseEntity ok")
     }
 
     @GetMapping("/me")

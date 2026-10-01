@@ -1,0 +1,16 @@
+### ==============================================================================
+### ShopCraft API - Day 07: OAuth2 Social Login & JWT Bridge HTTP Verification
+### ==============================================================================
+
+@baseUrl = http://localhost:8080/api/v1
+
+### 1. Initiate GitHub OAuth2 Authorization Flow (Redirects to GitHub Consent Screen)
+GET http://localhost:8080/oauth2/authorization/github
+
+### 2. Verify OAuth2 Callback Endpoint with Minted Tokens
+GET {{baseUrl}}/auth/oauth2/callback?token=eyJhbGciOiJIUzI1NiJ9.test&refreshToken=test-rt-uuid
+
+### 3. Verify Accessing Protected User Profile with OAuth2 Bearer Token
+@sampleToken = eyJhbGciOiJIUzI1NiJ9.dummy
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{sampleToken}}
