@@ -4,6 +4,7 @@ import com.example.shopcraft.auth.dto.AuthResponse
 import com.example.shopcraft.auth.dto.LoginRequest
 import com.example.shopcraft.auth.dto.RegisterRequest
 import com.example.shopcraft.auth.dto.UserResponse
+import com.example.shopcraft.auth.dto.RefreshTokenRequest
 import com.example.shopcraft.auth.entity.Role
 import com.example.shopcraft.auth.entity.User
 import com.example.shopcraft.auth.repository.UserRepository
@@ -21,7 +22,8 @@ import org.springframework.transaction.annotation.Transactional
 class AuthServiceImpl(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtTokenProvider: JwtTokenProvider
+    private val jwtTokenProvider: JwtTokenProvider,
+    private val refreshTokenService: RefreshTokenService
 ) : AuthService {
 
     @Transactional
@@ -39,14 +41,17 @@ class AuthServiceImpl(
         )
         val savedUser = userRepository.save(user)
         val token = jwtTokenProvider.generateToken(savedUser.email, savedUser.role)
+        val refreshToken = refreshTokenService.createRefreshToken(savedUser)
 
         return AuthResponse(
             token = token,
+            refreshToken = refreshToken.token,
             tokenType = "Bearer",
             user = savedUser.toResponse()
         )
     }
 
+    @Transactional
     override fun login(request: LoginRequest): AuthResponse {
         val normalizedEmail = request.email.trim().lowercase()
         val user = userRepository.findByEmail(normalizedEmail)
@@ -57,11 +62,31 @@ class AuthServiceImpl(
         }
 
         val token = jwtTokenProvider.generateToken(user.email, user.role)
+        val refreshToken = refreshTokenService.createRefreshToken(user)
         return AuthResponse(
             token = token,
+            refreshToken = refreshToken.token,
             tokenType = "Bearer",
             user = user.toResponse()
         )
+    }
+
+    @Transactional
+    override fun refreshToken(request: RefreshTokenRequest): AuthResponse {
+        val (newRefreshToken, user) = refreshTokenService.rotateRefreshToken(request.refreshToken)
+        val token = jwtTokenProvider.generateToken(user.email, user.role)
+
+        return AuthResponse(
+            token = token,
+            refreshToken = newRefreshToken.token,
+            tokenType = "Bearer",
+            user = user.toResponse()
+        )
+    }
+
+    @Transactional
+    override fun logout(request: RefreshTokenRequest) {
+        refreshTokenService.revokeRefreshToken(request.refreshToken)
     }
 
     override fun getCurrentUser(): UserResponse {

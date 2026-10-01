@@ -21,12 +21,23 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.crypto.password.PasswordEncoder
 
+import com.example.shopcraft.auth.dto.RefreshTokenRequest
+import com.example.shopcraft.auth.entity.RefreshToken
+import com.example.shopcraft.auth.service.RefreshTokenService
+import java.time.Instant
+
 class AuthServiceTest {
 
     private val userRepository: UserRepository = mock()
     private val passwordEncoder: PasswordEncoder = mock()
     private val jwtTokenProvider: JwtTokenProvider = mock()
-    private val authService: AuthService = AuthServiceImpl(userRepository, passwordEncoder, jwtTokenProvider)
+    private val refreshTokenService: RefreshTokenService = mock()
+    private val authService: AuthService = AuthServiceImpl(
+        userRepository,
+        passwordEncoder,
+        jwtTokenProvider,
+        refreshTokenService
+    )
 
     @AfterEach
     fun tearDown() {
@@ -54,10 +65,15 @@ class AuthServiceTest {
             )
         }
         whenever(jwtTokenProvider.generateToken("newuser@example.com", Role.ROLE_USER)).thenReturn("mocked.jwt.token")
+        whenever(refreshTokenService.createRefreshToken(any())).thenAnswer { invocation ->
+            val user = invocation.arguments[0] as User
+            RefreshToken(id = 1L, token = "refresh.token.123", user = user, expiryDate = Instant.now().plusSeconds(3600))
+        }
 
         val response = authService.register(request)
 
         assertThat(response.token).isEqualTo("mocked.jwt.token")
+        assertThat(response.refreshToken).isEqualTo("refresh.token.123")
         assertThat(response.tokenType).isEqualTo("Bearer")
         assertThat(response.user.id).isEqualTo(10L)
         assertThat(response.user.email).isEqualTo("newuser@example.com")
@@ -98,12 +114,51 @@ class AuthServiceTest {
         whenever(userRepository.findByEmail("user@example.com")).thenReturn(user)
         whenever(passwordEncoder.matches("CorrectPassword123!", "encoded_hash")).thenReturn(true)
         whenever(jwtTokenProvider.generateToken("user@example.com", Role.ROLE_USER)).thenReturn("valid.login.jwt")
+        whenever(refreshTokenService.createRefreshToken(user)).thenReturn(
+            RefreshToken(id = 2L, token = "refresh.token.login", user = user, expiryDate = Instant.now().plusSeconds(3600))
+        )
 
         val response = authService.login(request)
 
         assertThat(response.token).isEqualTo("valid.login.jwt")
+        assertThat(response.refreshToken).isEqualTo("refresh.token.login")
         assertThat(response.user.email).isEqualTo("user@example.com")
         assertThat(response.user.fullName).isEqualTo("Valid User")
+    }
+
+    @Test
+    fun `given valid refresh token request, when refreshToken, then rotates token and returns new auth response`() {
+        val user = User(
+            id = 7L,
+            email = "refreshed@example.com",
+            passwordHash = "hash",
+            fullName = "Refresh User",
+            role = Role.ROLE_USER
+        )
+        val newRefreshToken = RefreshToken(
+            id = 3L,
+            token = "new-rotated-refresh-token",
+            user = user,
+            expiryDate = Instant.now().plusSeconds(3600)
+        )
+        whenever(refreshTokenService.rotateRefreshToken("old-refresh-token")).thenReturn(Pair(newRefreshToken, user))
+        whenever(jwtTokenProvider.generateToken("refreshed@example.com", Role.ROLE_USER)).thenReturn("new.access.token")
+
+        val response = authService.refreshToken(RefreshTokenRequest("old-refresh-token"))
+
+        assertThat(response.token).isEqualTo("new.access.token")
+        assertThat(response.refreshToken).isEqualTo("new-rotated-refresh-token")
+        assertThat(response.user.email).isEqualTo("refreshed@example.com")
+        verify(refreshTokenService).rotateRefreshToken("old-refresh-token")
+    }
+
+    @Test
+    fun `given valid logout request, when logout, then delegates revocation to refreshTokenService`() {
+        val request = RefreshTokenRequest("logout-refresh-token")
+
+        authService.logout(request)
+
+        verify(refreshTokenService).revokeRefreshToken("logout-refresh-token")
     }
 
     @Test

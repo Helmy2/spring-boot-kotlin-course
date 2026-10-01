@@ -1,140 +1,126 @@
-# Day 06: JWT Authentication & Role-Based Access Control (RBAC)
+# Day 06 Part 2: Refresh Token Mechanism & Rotation
 
-Welcome to **Day 06** of the ShopCraft Backend Master Course. In this module, you will master enterprise-grade security for modern distributed systems and microservices. You will learn to build a completely **stateless authentication system** using **JSON Web Tokens (JWT)** via the modern **JJWT 0.12.x** library, integrate a custom `OncePerRequestFilter` into the Spring Security 7.x FilterChain, format all security exceptions according to **RFC 7807 `ProblemDetail`**, and enforce granular **Role-Based Access Control (RBAC)** across customer and administrator roles.
+Welcome to **Day 06 Part 2** of the ShopCraft Backend Master Course. In Part 1, you built a stateless authentication system using **JSON Web Tokens (JWT)** and granular **Role-Based Access Control (RBAC)**.
+
+While pure stateless JWTs excel at performance and horizontal scalability, they pose a critical security challenge: **they cannot be easily invalidated before expiration without introducing shared server state**. If an access token with a long lifetime (e.g., 24 hours) is intercepted, an attacker possesses unrestricted access for that full duration.
+
+In Part 2, you will implement an enterprise **Token Rotation & Revocation Architecture**:
+1. **Short-Lived Access Tokens**: JWTs expire in 15 minutes (`expiration-ms: 900000`).
+2. **Long-Lived Refresh Tokens**: Secure, persistent opaque tokens stored in PostgreSQL with a 7-day lifetime (`refresh-token-expiration-ms: 604800000`).
+3. **Refresh Token Rotation (RTR)**: Every time a refresh token is exchanged for a new access token, the used refresh token is invalidated and a fresh refresh token is issued.
+4. **Token Reuse Detection & Family Revocation**: If a previously revoked refresh token is presented (indicating a replay or theft attack), all refresh tokens belonging to that user are immediately invalidated, forcing a full credential re-authentication.
+5. **Clean Logout Semantics**: Revoking active refresh tokens on demand.
 
 ---
 
 ## 🎯 Learning Objectives
 
-By the end of this module, you will master:
-1. **Stateless Security vs Stateful Sessions**: Why modern REST APIs discard server-side session cookies (`SessionCreationPolicy.STATELESS`) in favor of cryptographically signed Bearer tokens for horizontal scalability and cross-domain resilience.
-2. **Modern JJWT 0.12.x Mechanics**: Constructing (`Jwts.builder()`), signing (`Keys.hmacShaKeyFor()`), verifying, and parsing signed JWT claims with the latest fluent JJWT API.
-3. **Spring Security Filter Chain**: Intercepting incoming HTTP requests with `JwtAuthenticationFilter` (`OncePerRequestFilter`), extracting the `Authorization: Bearer <token>` header, and populating `SecurityContextHolder`.
-4. **RFC 7807 Security Compliance**: Implementing `AuthenticationEntryPoint` (401 Unauthorized) and `AccessDeniedHandler` (403 Forbidden) so that authentication and authorization rejections return structured `ProblemDetail` JSON instead of default container HTML error pages.
-5. **Password Salting & Hashing**: Utilizing `BCryptPasswordEncoder` to safeguard customer credentials against rainbow table and brute-force attacks.
-6. **Role-Based Access Control (RBAC)**: Distinguishing between `ROLE_USER` and `ROLE_ADMIN` to protect catalog mutations (`POST`, `PUT`, `PATCH`, `DELETE`) and admin audit queries while keeping catalog browsing public.
+By the end of Part 2, you will master:
+1. **The Access Token vs. Refresh Token Dilemma**: Why distributed systems separate authorization credentials (short-lived JWTs) from session persistence credentials (refresh tokens).
+2. **Refresh Token Rotation (RTR)**: Preventing replay attacks by ensuring each refresh token is single-use.
+3. **Breach Detection & Family Revocation**: Detecting concurrent token usage and protecting compromised accounts by terminating all active user sessions.
+4. **JPA Lifecycle Management for Session Tokens**: Modeling `RefreshToken` with `@ManyToOne` user associations, expiry tracking, and revocation flags.
+5. **RFC 7807 ProblemDetail for Token Refresh Errors**: Returning structured HTTP 401 ProblemDetail responses for expired, revoked, or non-existent refresh tokens.
+6. **Graceful User Logout**: Explicitly revoking refresh tokens to terminate sessions cleanly.
 
 ---
 
-## 🔬 Theoretical Foundations & Security Architecture
+## 🔬 Architecture & Token Lifecycle
 
-### 1. The Anatomy of a JSON Web Token (JWT)
-
-A JWT is a compact, URL-safe means of representing claims to be transferred between two parties. It consists of three parts separated by dots (`.`):
-
-$$\text{JWT} = \underbrace{\text{Base64Url}(\text{Header})}_{\text{Algorithm \& Token Type}} \;.\; \underbrace{\text{Base64Url}(\text{Payload})}_{\text{Claims: subject, roles, expiry}} \;.\; \underbrace{\text{Base64Url}(\text{Signature})}_{\text{HMAC-SHA256 signature}}$$
-
+### 1. Token Refresh & Rotation Flow
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Frontend / Mobile App
-    participant Auth as AuthController (/api/v1/auth)
-    participant Svc as AuthServiceImpl
-    participant JWT as JwtTokenProvider
-    participant Sec as Spring Security FilterChain
-    participant API as ProductController (/api/v1/products)
+    actor Client
+    participant AuthController
+    participant AuthService
+    participant RefreshTokenService
+    participant RefreshTokenRepository
+    participant JwtTokenProvider
 
-    Note over Client,Auth: 1. Authentication Phase
-    Client->>Auth: POST /api/v1/auth/login {email, password}
-    Auth->>Svc: login(request)
-    Svc->>Svc: Verify BCrypt password hash
-    Svc->>JWT: generateToken(email, role)
-    JWT-->>Svc: Signed JWT (eyJhbGciOi...)
-    Svc-->>Auth: AuthResponse {token, user}
-    Auth-->>Client: 200 OK + Bearer Token
+    Client->>AuthController: POST /api/v1/auth/refresh { "refreshToken": "uuid-v4-token" }
+    AuthController->>AuthService: refreshToken(request)
+    AuthService->>RefreshTokenService: rotateRefreshToken("uuid-v4-token")
+    RefreshTokenService->>RefreshTokenRepository: findByToken("uuid-v4-token")
+    RefreshTokenRepository-->>RefreshTokenService: RefreshToken entity
 
-    Note over Client,API: 2. Authenticated Request Phase
-    Client->>Sec: POST /api/v1/products [Header: Authorization: Bearer eyJhbGciOi...]
-    Sec->>JWT: validateToken(token) & extractRoles(token)
-    JWT-->>Sec: Valid (Subject: admin@shopcraft.com, Role: ROLE_ADMIN)
-    Sec->>Sec: SecurityContextHolder.setAuthentication(...)
-    Sec->>API: Dispatch to controller
-    API-->>Client: 201 Created + Location Header
-```
-
----
-
-### 2. Spring Security FilterChain Pipeline
-
-In Spring Security, all incoming HTTP requests traverse a chain of servlet filters. For stateless REST APIs, we customize this chain:
-
-```mermaid
-graph TD
-    Request[HTTP Request] --> Cors[CORS / Header Filters]
-    Cors --> CsrfDisabled[CSRF Disabled - Stateless REST]
-    CsrfDisabled --> JwtFilter[JwtAuthenticationFilter - OncePerRequestFilter]
-    
-    subgraph JWT Filter Logic
-        JwtFilter --> HasToken{Bearer Token Present & Valid?}
-        HasToken -->|Yes| SetContext[Populate SecurityContextHolder]
-        HasToken -->|No / Invalid| ContinueChain[Proceed without Context]
+    alt Token Not Found
+        RefreshTokenService-->>Client: 401 Unauthorized (TokenRefreshException: "Token not found")
+    else Token Revoked (Reuse Attack Detected!)
+        RefreshTokenService->>RefreshTokenRepository: Revoke all tokens for user
+        RefreshTokenService-->>Client: 401 Unauthorized (TokenRefreshException: "Potential token reuse detected")
+    else Token Expired
+        RefreshTokenService->>RefreshTokenRepository: delete(token)
+        RefreshTokenService-->>Client: 401 Unauthorized (TokenRefreshException: "Token expired")
+    else Token Valid
+        RefreshTokenService->>RefreshTokenRepository: Mark old token revoked = true
+        RefreshTokenService->>RefreshTokenRepository: Save new RefreshToken (new UUID, 7-day expiry)
+        RefreshTokenService-->>AuthService: Pair(newRefreshToken, user)
+        AuthService->>JwtTokenProvider: generateToken(user.email, user.role)
+        JwtTokenProvider-->>AuthService: newAccessToken (15m)
+        AuthService-->>AuthController: AuthResponse(token, refreshToken, user)
+        AuthController-->>Client: 200 OK { token, refreshToken, tokenType: "Bearer", user }
     end
-    
-    SetContext --> AuthCheck{Route Requires Authentication?}
-    ContinueChain --> AuthCheck
-    
-    AuthCheck -->|Unauthenticated on Secured Route| EntryPoint[JwtAuthenticationEntryPoint -> 401 ProblemDetail]
-    AuthCheck -->|Insufficient Role Permission| DeniedHandler[CustomAccessDeniedHandler -> 403 ProblemDetail]
-    AuthCheck -->|Authorized / Public| Controller[Target RestController]
+```
+
+### 2. Entity Relationship
+```mermaid
+erDiagram
+    USERS ||--o{ REFRESH_TOKENS : "has many"
+    USERS {
+        bigint id PK
+        varchar email UK
+        varchar password_hash
+        varchar full_name
+        varchar role
+        timestamp created_at
+        timestamp updated_at
+    }
+    REFRESH_TOKENS {
+        bigint id PK
+        varchar token UK
+        bigint user_id FK
+        timestamp expiry_date
+        boolean revoked
+        timestamp created_at
+    }
 ```
 
 ---
 
-### 3. Route Authorization Matrix
+## 🛠️ Step-by-Step Implementation Guide
 
-| Endpoint | HTTP Method | Permitted Roles | Description |
-| :--- | :--- | :--- | :--- |
-| `/api/v1/auth/register` | `POST` | Public (`permitAll`) | Register new customer account (`ROLE_USER`) |
-| `/api/v1/auth/login` | `POST` | Public (`permitAll`) | Authenticate credentials and receive Bearer JWT token |
-| `/api/v1/auth/me` | `GET` | Authenticated (`ROLE_USER` or `ROLE_ADMIN`) | Retrieve authenticated user profile from SecurityContext |
-| `/api/v1/products/**` | `GET` | Public (`permitAll`) | Browse catalog and view product details |
-| `/api/v1/products` | `POST` | `ROLE_ADMIN` | Create new product entity |
-| `/api/v1/products/{id}` | `PUT` | `ROLE_ADMIN` | Fully update existing product |
-| `/api/v1/products/{id}` | `PATCH` | `ROLE_ADMIN` | Partially patch product |
-| `/api/v1/products/{id}` | `DELETE` | `ROLE_ADMIN` | Delete product (204 No Content) |
-| `/api/v1/admin/audit-logs` | `GET` | `ROLE_ADMIN` | Query audit trail |
-| `/h2-console/**` | Any | Public (`permitAll`) | In-memory database web console |
+### Step 1: RefreshToken Entity & Repository
+- Open [RefreshToken.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/entity/RefreshToken.kt).
+- Map to the `refresh_tokens` table with `@Entity`, `@Table(name = "refresh_tokens")`.
+- Store `token` (unique UUID string), `@ManyToOne(fetch = FetchType.LAZY)` to `User`, `expiryDate: Instant`, `revoked: Boolean`, and `createdAt: Instant`.
+- In [RefreshTokenRepository.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/repository/RefreshTokenRepository.kt), provide query methods `findByToken(token: String): RefreshToken?` and `findAllByUser(user: User): List<RefreshToken>`.
 
----
+### Step 2: RFC 7807 Error Handling
+- Open [TokenRefreshException.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/common/exception/TokenRefreshException.kt).
+- In [GlobalExceptionHandler.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/common/exception/GlobalExceptionHandler.kt), map `TokenRefreshException` to `HttpStatus.UNAUTHORIZED` with `title = "Token Refresh Failed"`.
 
-## 🛠️ Step-by-Step Exercise Guide (`day-06-jwt-authentication-starter`)
+### Step 3: RefreshTokenService Implementation
+- Open [RefreshTokenServiceImpl.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/service/RefreshTokenServiceImpl.kt).
+- Implement `createRefreshToken`: mint a new UUID token with expiry configured from `JwtProperties.refreshTokenExpirationMs`.
+- Implement `rotateRefreshToken`:
+  - Find token; throw `TokenRefreshException` if not found.
+  - If `token.revoked == true`: trigger **Reuse Detection**, revoke all user tokens with `revokeAllUserTokens(token.user)`, and throw `TokenRefreshException`.
+  - If `token.isExpired()`: delete token and throw `TokenRefreshException`.
+  - Mark old token as revoked (`revoked = true`), save, and create a brand new refresh token.
+- Implement `revokeRefreshToken` and `revokeAllUserTokens`.
 
-In `day-06-jwt-authentication-starter`, you will implement the security system through 8 guided steps:
-
-### Step 1: User Response Mapping
-- Open [User.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/entity/User.kt).
-- Implement `toResponse(): UserResponse` mapping the entity state into an immutable data class.
-
-### Step 2: JWT Token Minting with JJWT 0.12.x
-- Open [JwtTokenProvider.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/security/JwtTokenProvider.kt).
-- Implement `generateToken(email: String, role: Role): String` using `Jwts.builder()`.
-- Add claims for subject, roles, issuedAt, and expiration, and sign with HMAC-SHA.
-
-### Step 3: JWT Token Validation & Claims Parsing
-- In [JwtTokenProvider.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/security/JwtTokenProvider.kt), implement `validateToken`, `extractUsername`, and `extractRoles`.
-- Use `Jwts.parser().verifyWith(key).build().parseSignedClaims(token).payload`.
-
-### Step 4: Security Filter Chain Token Extraction
-- Open [JwtAuthenticationFilter.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/security/JwtAuthenticationFilter.kt).
-- Implement `doFilterInternal` extracting the Bearer token from the `Authorization` header.
-- Validate the token and populate `SecurityContextHolder.getContext().authentication`.
-
-### Step 5: User Registration Business Logic
+### Step 4: AuthServiceImpl Integration
 - Open [AuthServiceImpl.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/service/AuthServiceImpl.kt).
-- Implement `register(request: RegisterRequest): AuthResponse`.
-- Verify email uniqueness, hash the password using `passwordEncoder.encode()`, persist the `User`, and mint a token.
+- Inject `RefreshTokenService`.
+- On `register` and `login`: create a refresh token and return it in `AuthResponse`.
+- Implement `refreshToken(request)`: invoke `refreshTokenService.rotateRefreshToken(request.refreshToken)` and generate a fresh access token.
+- Implement `logout(request)`: invoke `refreshTokenService.revokeRefreshToken(request.refreshToken)`.
 
-### Step 6: User Authentication & Token Issuance
-- In [AuthServiceImpl.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/service/AuthServiceImpl.kt), implement `login(request: LoginRequest): AuthResponse`.
-- Verify credentials with `passwordEncoder.matches()` and issue a JWT token. Also implement `getCurrentUser()`.
-
-### Step 7: Security FilterChain Configuration
-- Open [SecurityConfig.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/common/config/SecurityConfig.kt).
-- Configure stateless session management, register `JwtAuthenticationFilter`, configure `JwtAuthenticationEntryPoint` and `CustomAccessDeniedHandler`, and declare RBAC endpoint rules.
-
-### Step 8: Authentication Controller Endpoints
+### Step 5: Controller Endpoints
 - Open [AuthController.kt](file:///Users/platinum/IdeaProjects/spring-boot-kotlin-course/src/main/kotlin/com/example/shopcraft/auth/controller/AuthController.kt).
-- Follow guided comments to annotate methods with `@PostMapping("/register")`, `@PostMapping("/login")`, and `@GetMapping("/me")`, using `@Valid` and `@RequestBody`.
+- Expose `POST /api/v1/auth/refresh` accepting `@Valid @RequestBody RefreshTokenRequest`.
+- Expose `POST /api/v1/auth/logout` accepting `@Valid @RequestBody RefreshTokenRequest` returning `204 No Content`.
 
 ---
 
@@ -145,13 +131,13 @@ Run the complete test suite:
 ./gradlew test --rerun-tasks
 ```
 
-Run only authentication unit tests:
+Run only refresh token unit and slice tests:
 ```bash
-./gradlew test --tests "com.example.shopcraft.auth.security.*"
-./gradlew test --tests "com.example.shopcraft.auth.service.*"
+./gradlew test --tests "com.example.shopcraft.auth.service.RefreshTokenServiceTest"
+./gradlew test --tests "com.example.shopcraft.auth.controller.AuthControllerRefreshTest"
 ```
 
-Run only security RBAC integration tests:
+Run full E2E refresh token rotation & reuse integration test:
 ```bash
-./gradlew test --tests "com.example.shopcraft.auth.SecurityRbacIntegrationTest"
+./gradlew test --tests "com.example.shopcraft.auth.RefreshTokenIntegrationTest"
 ```

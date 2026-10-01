@@ -2,6 +2,7 @@ package com.example.shopcraft.auth.controller
 
 import com.example.shopcraft.auth.dto.AuthResponse
 import com.example.shopcraft.auth.dto.LoginRequest
+import com.example.shopcraft.auth.dto.RefreshTokenRequest
 import com.example.shopcraft.auth.dto.RegisterRequest
 import com.example.shopcraft.auth.dto.UserResponse
 import com.example.shopcraft.auth.service.AuthService
@@ -32,6 +33,19 @@ class AuthController(
     fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<AuthResponse> {
         val response = authService.login(request)
         return ResponseEntity.ok(response)
+    }
+
+    @PostMapping("/refresh")
+    fun refreshToken(@Valid @RequestBody request: RefreshTokenRequest): ResponseEntity<AuthResponse> {
+        val response = authService.refreshToken(request)
+        return ResponseEntity.ok(response)
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun logout(@Valid @RequestBody request: RefreshTokenRequest): ResponseEntity<Unit> {
+        authService.logout(request)
+        return ResponseEntity.noContent().build()
     }
 
     @GetMapping("/me")

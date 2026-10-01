@@ -28,6 +28,20 @@ class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail)
     }
 
+    @ExceptionHandler(TokenRefreshException::class)
+    fun handleTokenRefreshException(ex: TokenRefreshException): ResponseEntity<ProblemDetail> {
+        val problemDetail = ProblemDetail.forStatusAndDetail(
+            HttpStatus.UNAUTHORIZED,
+            ex.message ?: "Invalid or expired refresh token"
+        ).apply {
+            title = "Token Refresh Failed"
+            type = URI.create("https://shopcraft.example.com/errors/token-refresh-failed")
+            setProperty("timestamp", Instant.now())
+        }
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail)
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleValidationException(ex: MethodArgumentNotValidException): ResponseEntity<ProblemDetail> {
         val fieldErrors = ex.bindingResult.fieldErrors.map { fieldError ->
