@@ -1,10 +1,14 @@
 package com.example.shopcraft.common.config
 
+import com.example.shopcraft.auth.oauth2.CustomOAuth2UserService
+import com.example.shopcraft.auth.oauth2.OAuth2AuthenticationSuccessHandler
+import com.example.shopcraft.auth.oauth2.OAuth2Properties
 import com.example.shopcraft.auth.security.CustomAccessDeniedHandler
 import com.example.shopcraft.auth.security.JwtAuthenticationEntryPoint
 import com.example.shopcraft.auth.security.JwtAuthenticationFilter
 import com.example.shopcraft.auth.security.JwtProperties
 import com.example.shopcraft.auth.security.JwtTokenProvider
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -24,7 +28,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@EnableConfigurationProperties(JwtProperties::class)
+@EnableConfigurationProperties(JwtProperties::class, OAuth2Properties::class)
 @Import(
     JwtAuthenticationFilter::class,
     JwtAuthenticationEntryPoint::class,
@@ -36,6 +40,12 @@ class SecurityConfig(
     private val jwtAuthenticationEntryPoint: JwtAuthenticationEntryPoint,
     private val customAccessDeniedHandler: CustomAccessDeniedHandler
 ) {
+
+    @Autowired(required = false)
+    private var customOAuth2UserService: CustomOAuth2UserService? = null
+
+    @Autowired(required = false)
+    private var oauth2AuthenticationSuccessHandler: OAuth2AuthenticationSuccessHandler? = null
 
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
@@ -59,6 +69,7 @@ class SecurityConfig(
             .authorizeHttpRequests { auth ->
                 auth
                     .requestMatchers("/api/v1/auth/**").permitAll()
+                    .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/products/**").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/v1/products/**").hasRole("ADMIN")
@@ -69,7 +80,16 @@ class SecurityConfig(
                     .requestMatchers("/error").permitAll()
                     .anyRequest().authenticated()
             }
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
+
+        if (customOAuth2UserService != null && oauth2AuthenticationSuccessHandler != null) {
+            http.oauth2Login { oauth2 ->
+                oauth2
+                    .userInfoEndpoint { it.userService(customOAuth2UserService) }
+                    .successHandler(oauth2AuthenticationSuccessHandler)
+            }
+        }
+
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()
     }
