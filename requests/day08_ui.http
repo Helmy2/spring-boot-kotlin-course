@@ -1,0 +1,25 @@
+### ==============================================================================
+### ShopCraft API - Day 08: Full-Stack Kotlin HTML DSL & HTMX Verification
+### ==============================================================================
+
+@baseUrl = http://localhost:8080
+
+### 1. Load Storefront Catalog Page (Full HTML Page via Kotlin HTML DSL)
+GET {{baseUrl}}/
+Accept: text/html
+
+### 2. Live Search & Status Filter Partial (Server-Driven HTMX Fragment)
+GET {{baseUrl}}/ui/products?search=Keyboard&status=ACTIVE
+Accept: text/html
+
+### 3. Filter by Inactive / Draft Status Partial
+GET {{baseUrl}}/ui/products?status=DRAFT
+Accept: text/html
+
+### 4. Load Admin Operations Dashboard (Full HTML Page with Inventory & Metrics)
+GET {{baseUrl}}/ui/admin
+Accept: text/html
+
+### 5. Refresh Real-Time Security Audit & Telemetry Feed (HTMX Fragment)
+GET {{baseUrl}}/ui/audit
+Accept: text/html
